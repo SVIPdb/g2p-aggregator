@@ -1,4 +1,4 @@
-import molecularmatch
+from harvesters import molecularmatch
 
 mutations = [
     "Wild-Type TP53",

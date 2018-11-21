@@ -1,4 +1,4 @@
-import jax
+from harvesters import jax
 
 molecular_profiles = [
     "APC inact mut KRAS G12D",

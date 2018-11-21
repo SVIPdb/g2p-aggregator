@@ -3,8 +3,7 @@ sys.path.append('.')  # NOQA
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
-from disease_normalizer import normalize
-import requests
+from normalizers.disease_normalizer import normalize
 import requests_cache
 # cache responses
 requests_cache.install_cache('harvester')

@@ -5,7 +5,7 @@ import json
 
 sys.path.append('.')  # NOQA
 
-from drug_normalizer import normalize
+from normalizers.drug_normalizer import normalize
 
 
 # https://github.com/biostream/gdc-transform/blob/master/tcga_pubchem.map

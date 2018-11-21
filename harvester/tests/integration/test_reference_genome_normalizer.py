@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')  # NOQA
 
-from reference_genome_normalizer import normalize_feature_association
+from normalizers.reference_genome_normalizer import normalize_feature_association
 
 
 def _build_feature_association(referenceName):

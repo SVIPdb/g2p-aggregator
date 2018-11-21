@@ -1,10 +1,9 @@
 
 import json
 import sys
-import time
-import logging
+
 sys.path.append('.')  # NOQA
-import jax
+from harvesters import jax
 import cosmic_lookup_table
 
 LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("./cosmic_lookup_table.tsv")

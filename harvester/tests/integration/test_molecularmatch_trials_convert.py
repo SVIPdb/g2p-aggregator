@@ -1,4 +1,4 @@
-import molecularmatch_trials
+from harvesters import molecularmatch_trials
 import json
 from collections import namedtuple
 import evidence_label as el

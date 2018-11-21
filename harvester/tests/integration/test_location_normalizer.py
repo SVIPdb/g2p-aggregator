@@ -1,9 +1,7 @@
-
-import json
 import sys
-import time
+
 sys.path.append('.')  # NOQA
-from location_normalizer import normalize_feature_association
+from normalizers.location_normalizer import normalize_feature_association
 
 
 def test_normalize_feature_association_ALK_D1203N():

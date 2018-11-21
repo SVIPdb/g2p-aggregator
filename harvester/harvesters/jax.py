@@ -26,11 +26,14 @@ def _parse_profile(profile):
     parts = profile.split()
     global LOOKUP_TABLE
     global gene_list
+
     if not LOOKUP_TABLE:
         logging.info('_parse_profile: init LOOKUP_TABLE')
         LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
                 "./cosmic_lookup_table.tsv")
+
     parts = profile.split()
+
     # this list taken from https://ckb.jax.org/about/glossaryOfTerms
     # "Non specific variants" list, separated by space, where applicable
     jax_biomarker_types = [
@@ -51,13 +54,16 @@ def _parse_profile(profile):
         'rearrange',
         'wild-type'
     ]
+
     if not gene_list:
         gene_list = LOOKUP_TABLE.get_genes()
+
     genes = []
     muts = []
     biomarkers = []
-    biomarker_types = None
+    biomarker_types = [] # FIXME: this used to be None (and would break at an append()), but i have no idea why
     fusions = []
+
     # Complex loop: Run through the split profile, creating four arrays,
     # one of the indices of genes in `parts`, one of the indices of mutations
     # in `parts` (if present, `None` if not), one of biomarker strings,
@@ -77,18 +83,21 @@ def _parse_profile(profile):
                     genes.append(parts[i])
                     biomarker_types = []
                 continue
-       # check to see if you're on a gene
+
+        # check to see if you're on a gene
         if parts[i] in gene_list:
             genes.append(parts[i])
             # reset the biomarker_type array on every new gene
             biomarker_types = []
             continue
+
         # check to see if part matches a mutation variant format, e.g. `V600E`
         if re.match("[A-Z][0-9]+[fs]?[*]?[0-9]?[A-Z]?", parts[i]):
             muts.append(parts[i])
             if i+1 == len(parts) or parts[i+1].split('-')[0] in gene_list:
                 biomarkers.append([''])
             continue
+
         # Should only hit this if there's no mutation listed for the present gene,
         # so denote that and catch the biomarker.
         elif len(genes) != len(muts):
@@ -99,13 +108,16 @@ def _parse_profile(profile):
                 biomarkers.append(biomarker_types)
         elif len(genes) != len(biomarkers):
             biomarkers.append([''])
+
     # change the internal biomarker_type arrays into strings
     biomarker_types = []
+
     for biomarker in biomarkers:
         if biomarker[0]:
             biomarker_types.append(' '.join(biomarker))
         else:
             biomarker_types.append('')
+
     return genes, muts, biomarker_types, fusions
 
 

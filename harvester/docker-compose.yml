@@ -1,0 +1,24 @@
+version: '3.1'
+
+services:
+  harvester:
+    image: python:2
+    entrypoint: /bin/bash
+    working_dir: /app
+    environment:
+      - BIOONTOLOGY_API_KEY=7951121e-3c26-4db1-9f82-476d928dfbc2
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+    volumes:
+      - '.:/app'
+      - '../data:/data'
+    depends_on:
+      - db
+  db:
+    image: postgres
+    restart: always
+    volumes:
+      - './postgres_init:/docker-entrypoint-initdb.d'
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD

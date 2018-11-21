@@ -2,8 +2,7 @@
 import sys
 sys.path.append('.')  # NOQA
 import json
-from drug_normalizer import normalize, normalize_chembl
-import requests
+from normalizers.drug_normalizer import normalize
 
 # cache responses
 import requests_cache

@@ -2,13 +2,12 @@
 from __future__ import print_function
 import sys
 import argparse
-sys.path.append('silos')  # NOQA
 
 import json
 import argparse
 
-from elastic_tagger import ElasticTagger
-import elastic_tagger
+from silos.elastic_tagger import ElasticTagger
+from silos import elastic_tagger
 
 
 def main():

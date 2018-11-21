@@ -10,7 +10,7 @@ CGI_VERSION=20170208
 all: oncokb_all_actionable_variants.tsv cgi_biomarkers_per_variant.tsv \
 		cosmic_lookup_table.tsv cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv \
 		benchmark_results.txt
-	
+
 
 ## Do bulk download of OncoKB and set up TSV for ingestion.
 oncokb_all_actionable_variants.tsv:
@@ -19,7 +19,7 @@ oncokb_all_actionable_variants.tsv:
 
 ## Do bulk download of CGI and set up TSV for ingestion.
 cgi_biomarkers_per_variant.tsv:
-	mkdir cgi_biomarkers_$(CGI_VERSION)
+	mkdir -p cgi_biomarkers_$(CGI_VERSION)
 	cd cgi_biomarkers_$(CGI_VERSION) && \
 	curl -Ok https://www.cancergenomeinterpreter.org/data/cgi_biomarkers_$(CGI_VERSION).zip && \
 	unzip cgi_biomarkers_$(CGI_VERSION).zip

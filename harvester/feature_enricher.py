@@ -1,11 +1,9 @@
-import json
 import requests
-import os
 import mutation_type as mut
 import logging
 import re
 import copy
-import gene_enricher
+from normalizers import gene_enricher
 
 
 def _enrich_ensemble(feature, transcript_id, exon, provenance_rule):

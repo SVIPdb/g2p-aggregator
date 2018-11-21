@@ -1,12 +1,10 @@
-
-import json
 import sys
-import time
-sys.path.append('.')  # NOQA
-from jax import convert as jax_convert
-from cgi_biomarkers import convert as cgi_convert
 
-from location_normalizer import normalize_feature_association
+sys.path.append('.')  # NOQA
+from harvesters.jax import convert as jax_convert
+from harvesters.cgi_biomarkers import convert as cgi_convert
+
+from normalizers.location_normalizer import normalize_feature_association
 from harvester import normalize
 
 from attrdict import AttrDict

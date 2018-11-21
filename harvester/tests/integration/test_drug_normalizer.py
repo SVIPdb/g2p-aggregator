@@ -1,10 +1,9 @@
 import sys
 sys.path.append('.')  # NOQA
 
-from drug_normalizer import normalize, normalize_chembl, _decompose
-import requests
-import requests_cache
-import logging
+from normalizers.drug_normalizer import normalize, normalize_chembl, _decompose
+
+
 # logging.basicConfig(level=logging.WARNING)
 
 # cache responses

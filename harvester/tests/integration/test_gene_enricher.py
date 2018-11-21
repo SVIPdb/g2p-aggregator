@@ -1,7 +1,7 @@
 
 import sys
 sys.path.append('.')  # NOQA
-import gene_enricher  # NOQA
+from normalizers import gene_enricher
 
 
 def test_simple():
