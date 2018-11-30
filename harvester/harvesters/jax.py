@@ -123,7 +123,9 @@ def _parse_profile(profile):
 
 def harvest(genes):
     """ get data from jax, ignore genes - get all """
-    for gene in _get_gene_ids():
+    gene_list = list(_get_gene_ids())
+    logging.info("JAX gene list: {}".format(gene_list))
+    for gene in gene_list:
         for jax_evidence in get_evidence([gene]):
             yield jax_evidence
 
@@ -136,8 +138,9 @@ def _get_gene_ids():
     while offset > -1:
         url = 'https://ckb.jax.org/ckb-api/api/v1/genes?offset={}&max={}' \
                 .format(offset, size)
-        response = AttrDict(
-            requests.get(url, verify=False, timeout=120).json())
+        json_response = requests.get(url, verify=False, timeout=120).json()
+        print "JSON: %s" % json_response
+        response = AttrDict(json_response)
         gene_count = gene_count + len(response.genes)
         if gene_count >= response.totalCount:
             offset = -1
