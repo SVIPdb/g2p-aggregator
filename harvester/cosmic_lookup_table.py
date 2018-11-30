@@ -9,7 +9,7 @@ import re
 import argparse
 import pandas
 import logging
-
+from tqdm import tqdm
 
 class CosmicLookup(object):
     """
@@ -69,26 +69,34 @@ def parse_hgvc_c(hgvs_c):
     pos, type, ref, alt
     """
 
-    if not hgvs_c.startswith("c.") or "?" in hgvs_c:
+    # FIXME: there's one pathological entry in CosmicMutantExport.tsv as of 28-11-2018:
+    # NOTCH1	[...]	COSM36049	c.	p.E2516Xfs*?	[...]
+    # note the hgvs string is just 'c.'. i'm just skipping it for now, but it should be revisited
+
+    if not hgvs_c.startswith("c.") or "?" in hgvs_c or hgvs_c == "c.":
         return {}
 
-    parts = re.split(r"([[_\.ACGT]+|[0-9]+|del|ins])", hgvs_c[2:])
+    try:
+        parts = re.split(r"([[_\.ACGT]+|[0-9]+|del|ins])", hgvs_c[2:])
 
-    bases = "ATCG"
-    pos = ctype = ref = alt = None
-    if parts[4] == ">":
-        # Substitution.
-        pos = parts[1]
-        ctype = "sub"
-        ref = parts[3]
-        alt = parts[5]
+        bases = "ATCG"
+        pos = ctype = ref = alt = None
+        if parts[4] == ">":
+            # Substitution.
+            pos = parts[1]
+            ctype = "sub"
+            ref = parts[3]
+            alt = parts[5]
 
-    return {
-        "pos": pos,
-        "type": ctype,
-        "ref": ref or '',
-        "alt": alt or ''
-    }
+        return {
+            "pos": pos,
+            "type": ctype,
+            "ref": ref or '',
+            "alt": alt or ''
+        }
+    except Exception as ex:
+        print >> sys.stderr, "Error encountered for string: %s" % hgvs_c
+        raise ex
 
 
 def parse_genome_pos(genome_pos):
@@ -115,7 +123,7 @@ def print_lookup_table(input_stream):
         return ''.join(bases)
 
     print "\t".join(["gene", "hgvs_c", "hgvs_p", "build", "chrom", "start", "end", "ref", "alt", "strand"])  # NOQA
-    for line in input_stream:
+    for line in tqdm(input_stream):
         fields = line.split("\t")
         gene = fields[0]
         hgvs_c, hgvs_p = fields[17:19]

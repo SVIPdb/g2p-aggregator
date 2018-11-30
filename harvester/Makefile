@@ -26,7 +26,7 @@ cgi_biomarkers_per_variant.tsv:
 	cp cgi_biomarkers_$(CGI_VERSION)/cgi_biomarkers_per_variant.tsv .
 
 ## Create COSMIC lookup table suitable for annotating variants with chrom/start/end/ref/alt
-cosmic_lookup_table.tsv:
+cosmic_lookup_table.tsv: $(COSMIC_MUTATIONS)
 	gzcat $(COSMIC_MUTATIONS) | tail -n +2 | python cosmic_lookup_table.py create_table > temp.tsv
 	(head -n 1 temp.tsv ; tail -n +2 temp.tsv | sort | uniq) > cosmic_lookup_table.tsv
 	rm -f temp.tsv
