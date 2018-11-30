@@ -6,6 +6,7 @@ import evidence_label as el
 import evidence_direction as ed
 import sys
 import logging
+from tqdm import tqdm
 
 
 def harvest(genes):
@@ -32,7 +33,7 @@ def harvest(genes):
             else:
                 variants = r.json()['variants']
                 variants_details = []
-                for variant in variants:
+                for variant in tqdm(variants, desc="fetching civic variant data"):
                     r = requests.get('https://civic.genome.wustl.edu/api/variants/{}'.format(variant['id']))   # NOQA
                     variants_details.append(r.json())
                 gene_data = {'gene': gene,
@@ -45,41 +46,45 @@ def convert(gene_data):
     try:
         variants = gene_data['civic']['variants']
         for variant in variants:
-            feature = {}
-            feature['geneSymbol'] = variant['entrez_name']
-            feature['entrez_id'] = variant['entrez_id']
-            feature['start'] = variant['coordinates']['start']
-            feature['end'] = variant['coordinates']['stop']
-            feature['referenceName'] = str(variant['coordinates']['reference_build'])  # NOQA
-            feature['chromosome'] = str(variant['coordinates']['chromosome'])
-            feature['ref'] = str(variant['coordinates']['reference_bases'])
-            feature['alt'] = str(variant['coordinates']['variant_bases'])
-            feature['name'] = variant['name']
-            feature['description'] = '{} {}'.format(variant['entrez_name'],
-                                                   variant['name'])
-            if (
-                'variant_types' in variant and
-                len(variant['variant_types']) > 0
-            ):
+            feature = {
+                'geneSymbol': variant['entrez_name'],
+                'entrez_id': variant['entrez_id'],
+                'start': variant['coordinates']['start'],
+                'end': variant['coordinates']['stop'],
+                'referenceName': str(variant['coordinates']['reference_build']),
+                'chromosome': str(variant['coordinates']['chromosome']),
+                'ref': str(variant['coordinates']['reference_bases']),
+                'alt': str(variant['coordinates']['variant_bases']),
+                'name': variant['name'],
+                'description': '{} {}'.format(variant['entrez_name'], variant['name'])
+            }
+
+            if 'variant_types' in variant and len(variant['variant_types']) > 0:
                 feature['biomarker_type'] = variant['variant_types'][0]['display_name']
+
             for evidence_item in variant['evidence_items']:
                 association = {}
+
                 for part in variant['name'].split():
                     if not '-' in part and not part == variant['entrez_name']:
                         association['variant_name'] = part
+
                 association['description'] = evidence_item['description']
                 association['environmentalContexts'] = []
                 environmentalContexts = association['environmentalContexts']
+
                 for drug in evidence_item['drugs']:
                     environmentalContexts.append({
                         'term': drug['name'],
                         'description': drug['name'],
                         'id': drug['pubchem_id']
                     })
+
                 association['phenotypes'] = [{
                     'description': evidence_item['disease']['name'],
-                    'id' : evidence_item['disease']['url']
+                    'id': evidence_item['disease']['url']
                 }]
+
                 association['evidence'] = [{
                     "evidenceType": {
                         "sourceName": "CIVIC",
@@ -92,6 +97,7 @@ def convert(gene_data):
                         ]
                     }
                 }]
+
                 # add summary fields for Display
                 association = el.evidence_label(
                     evidence_item['evidence_level'], association, na=True
@@ -100,23 +106,31 @@ def convert(gene_data):
                     evidence_item['clinical_significance'], association
                 )
 
-                association['source_link'] = 'https://civic.genome.wustl.edu/events/genes/{}/summary/variants/{}/summary'.format(variant['gene_id'], variant['id']) # NOQA
-                association['publication_url'] = evidence_item['source']['source_url'],   # NOQA
+                association[
+                    'source_link'] = 'https://civic.genome.wustl.edu/events/genes/{}/summary/variants/{}/summary'.format(
+                    variant['gene_id'], variant['id'])  # NOQA
+                association['publication_url'] = evidence_item['source']['source_url'],  # NOQA
                 if len(evidence_item['drugs']) > 0:
-                    association['drug_labels'] = ','.join([drug['name'] for drug in evidence_item['drugs']])   # NOQA
+                    association['drug_labels'] = ','.join([drug['name'] for drug in evidence_item['drugs']])  # NOQA
                 # create snapshot of original data
                 v = copy.deepcopy(variant)
                 del v['evidence_items']
                 v['evidence_items'] = [evidence_item]
-                source_url = "https://civicdb.org/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(variant['gene_id'], variant['id'], evidence_item['id'])  # NOQA
-                feature_association = {'genes': [gene_data['gene']],
-                                       'features': [feature],
-                                       'feature_names': evidence_item['name'],
-                                       'association': association,
-                                       'source': 'civic',
-                                       'source_url': source_url,
-                                       'civic': v}
+                source_url = "https://civicdb.org/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(
+                    variant['gene_id'], variant['id'], evidence_item['id'])  # NOQA
+
+                feature_association = {
+                    'genes': [gene_data['gene']],
+                    'features': [feature],
+                    'feature_names': evidence_item['name'],
+                    'association': association,
+                    'source': 'civic',
+                    'source_url': source_url,
+                    'civic': v
+                }
+
                 yield feature_association
+
     except Exception as e:
         logging.error(gene_data['gene'], exc_info=1)
 
@@ -128,6 +142,7 @@ def harvest_and_convert(genes):
         for feature_association in convert(gene_data):
             # print "convert_yield {}".format(feature_association.keys())
             yield feature_association
+
 
 # main
 if __name__ == '__main__':

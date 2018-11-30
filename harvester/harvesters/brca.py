@@ -50,9 +50,9 @@ def convert(gene_data):
         if len(feature['name']) == 0:
             feature['name'] = brca['HGVS_cDNA']
 
-        association = {}
-        association['description'] = brca['Pathogenicity_expert']
-        association['environmentalContexts'] = []
+        association = {
+            'description': brca['Pathogenicity_expert'], 'environmentalContexts': []
+        }
         if not brca['Condition_ID_value_ENIGMA'] == '-':
             association['phenotypes'] = [{ 'description': brca['Condition_ID_value_ENIGMA'] }]
 
@@ -78,6 +78,7 @@ def convert(gene_data):
                                'feature_names': feature['name'],
                                'association': association,
                                'source': 'brca',
+                               'source_url': 'https://brcaexchange.org/variant/%d' % brca['id'],
                                'brca': brca}
         yield feature_association
 

@@ -106,7 +106,7 @@ class ElasticSilo:
 
         if result['_shards']['failed'] > 0:
             logging.error('failure updating association {}'
-                          .format(gene_feature['gene']))
+                          .format(feature_association['gene']))
         # except Exception as e:
         #     logging.error(json.dumps(feature_association))
         #     raise e

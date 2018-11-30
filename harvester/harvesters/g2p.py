@@ -2,9 +2,10 @@
 
 from ga4gh.client import client
 import json
-import ga4gh.client.protocol as protocol
+import ga4gh.schemas.protocol as protocol
 
-ga4gh_endpoint = "http://10.96.11.130:8000"
+# ga4gh_endpoint = "http://10.96.11.130:8000"
+ga4gh_endpoint = "http://1kgenomes.ga4gh.org"
 c = client.HttpClient(ga4gh_endpoint)
 
 def harvest(genes):

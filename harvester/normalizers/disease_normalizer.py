@@ -31,6 +31,7 @@ def normalize_bioontology(name):
     quoted_name = urllib.quote_plus(name)
     url = 'http://data.bioontology.org/search?q={}&apikey={}'.format(quoted_name, API_KEY)  # NOQA
     r = requests.get(url, timeout=20)
+    r.raise_for_status()  # ensure the request was successful (which apparently isn't always the case...)
     response = r.json()
     terms = []
     if 'collection' in response and len(response['collection']) > 0:

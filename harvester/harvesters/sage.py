@@ -50,41 +50,44 @@ def convert(gene_data):
                     }
                   }
 
-        for index, evidence_item in enumerate(evidence):
-            description = '{} {} {}'.format(
-                evidence_item['clinical_manifestation'],
-                evidence_item['response_type'],
-                evidence_item['drug_labels']
-            )
-            association = {
+        # FIXME: the below line couldn't possibly be right, but it should be investigated nevertheless...
+        # for index, evidence_item in enumerate(evidence):
+
+        description = '{} {} {}'.format(
+            evidence_item['clinical_manifestation'],
+            evidence_item['response_type'],
+            evidence_item['drug_labels']
+        )
+        association = {
+            'description': description,
+            'phenotypes': [{'description': evidence_item['clinical_manifestation']}],
+            'evidence': [{
+                "evidenceType": {
+                    "sourceName": "sage",
+                    "id": '{}'.format(evidence_item['publication_url'])
+                },
                 'description': description,
-                'phenotypes': [{ 'description': evidence_item['clinical_manifestation'] }],
-                'evidence': [{
-                    "evidenceType": {
-                        "sourceName": "sage",
-                        "id": '{}'.format(evidence_item['publication_url'])
-                    },
-                    'description': description,
-                    'info': {
-                        'publications': [evidence_item['publication_url']]
-                    }
-                }]
-            }
-            association['environmentalContexts'] = [{
+                'info': {
+                    'publications': [evidence_item['publication_url']]
+                }
+            }],
+            'environmentalContexts': [{
                 'description': evidence_item['drug_labels'],
             }]
+        }
 
-            association = el.evidence_label(evidence_item['evidence_label'],
-                                            association, na=False)
-            association = ed.evidence_direction(evidence_item['response_type'],
-                                                association)
+        association = el.evidence_label(evidence_item['evidence_label'],
+                                        association, na=False)
+        association = ed.evidence_direction(evidence_item['response_type'],
+                                            association)
 
-            feature_association = {'genes': [gene],
-                                   'features': [feature],
-                                   'association': association,
-                                   'source': 'sage',
-                                   'sage': evidence_item}
-            yield feature_association
+        yield {
+            'genes': [gene],
+            'features': [feature],
+            'association': association,
+            'source': 'sage',
+            'sage': evidence_item
+        }
 
 
 def harvest_and_convert(genes):

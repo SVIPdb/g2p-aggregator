@@ -7,6 +7,7 @@ import json
 import evidence_label as el
 import evidence_direction as ed
 
+
 def harvest(genes=None):
     with open("../data/pmkb_interpretations.json", "r") as ins:
         for line in ins:
@@ -29,11 +30,11 @@ def convert(interpretation):
     features = []
     variant_name = []
     for variant in variants:
-	if 'coordinates' in variant:
-	    s = variant['coordinates']
+        if 'coordinates' in variant:
+            s = variant['coordinates']
             if not s:
-		continue
-	    coordinates = s.replace(' ', '').split(',')
+                continue
+            coordinates = s.replace(' ', '').split(',')
             for coordinate in coordinates:
                 feature = {}
                 feature['geneSymbol'] = variant['gene']['name']
@@ -64,9 +65,9 @@ def convert(interpretation):
                     feature['alt'] = alt
 
         if attributes['amino_acid_change']['string_value']:
-	    variant_name.append(attributes['amino_acid_change']['string_value'])
+            variant_name.append(attributes['amino_acid_change']['string_value'])
 
-	features.append(feature)
+        features.append(feature)
 
     # association['evidence_label'] = interpretation['tier']
     association['source_link'] = 'https://pmkb.weill.cornell.edu/therapies/{}'.format(interpretation['id'])
@@ -80,34 +81,36 @@ def convert(interpretation):
 
     association['phenotypes'] = []
     for tumor in tumors:
-        association['phenotypes'].append({ 'description': tumor['name'] })
+        association['phenotypes'].append({'description': tumor['name']})
 
     association['drug_labels'] = 'NA'
     association['evidence'] = [{
-         "evidenceType": { "sourceName": "pmkb" },
-         'description': str(interpretation['tier']),
-         'info': {
-             'publications': [
-    #             'http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(c['pmid']) for c in interpretation['citations']  # NOQA
-             ]
-         }
+        "evidenceType": {"sourceName": "pmkb"},
+        'description': str(interpretation['tier']),
+        'info': {
+            'publications': [
+                #             'http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(c['pmid']) for c in interpretation['citations']  # NOQA
+            ]
+        }
     }]
-        # add summary fields for Display
-   #     if len(interpretation['citations']) > 0:
-   #          association['publication_url'] = 'http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(interpretation['citations'][0]['pmid'])  # NOQA
+    # add summary fields for Display
+    #     if len(interpretation['citations']) > 0:
+    #          association['publication_url'] = 'http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(interpretation['citations'][0]['pmid'])  # NOQA
     association['publication_url'] = ''
     source_url = 'https://pmkb.weill.cornell.edu/therapies/{}'.format(interpretation['id'])
-    feature_association = {'genes': [genes],
-                           'features': features,
-                           'feature_names': ['{} {}'.format(f["geneSymbol"], f["name"]) for f in features],
-                           'association': association,
-                           'source': 'pmkb',
-                           'source_url': source_url,
-                           'pmkb': {
-                               'variant': variants,
-                               'tumor': tumors,
-                               'tissues': interpretation['tissues']
-                           }}
+    feature_association = {
+        'genes': [genes],
+        'features': features,
+        'feature_names': ['{} {}'.format(f["geneSymbol"], f["name"]) for f in features],
+        'association': association,
+        'source': 'pmkb',
+        'source_url': source_url,
+        'pmkb': {
+            'variant': variants,
+            'tumor': tumors,
+            'tissues': interpretation['tissues']
+        }
+    }
     yield feature_association
 
 

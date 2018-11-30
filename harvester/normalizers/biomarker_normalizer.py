@@ -83,6 +83,7 @@ def normalize(biomarker):
     quoted = urllib.quote_plus(_alias(biomarker))
     url = 'http://data.bioontology.org/search?q={}&apikey={}'.format(quoted, API_KEY)  # NOQA
     r = requests.get(url, timeout=20)
+    r.raise_for_status()  # ensure the request was successful (which apparently isn't always the case...)
     response = r.json()
     for obj in response['collection']:
         parts = obj['@id'].split('/')

@@ -163,19 +163,21 @@ def convert(gene_data):
                     feature = _enrich_feature(gene, feature)
                     features.append(feature)
 
-        feature = {}
-        feature['geneSymbol'] = gene
-        feature['name'] = variant['name']
-        feature['description'] = '{} {}'.format(gene, variant['name'])
-        feature['entrez_id'] = gene_data['entrezGeneId']
-        feature['biomarker_type'] = variant['consequence']['term']
+        feature = {
+            'geneSymbol': gene,
+            'name': variant['name'],
+            'description': '{} {}'.format(gene, variant['name']),
+            'entrez_id': gene_data['entrezGeneId'],
+            'biomarker_type': variant['consequence']['term']
+        }
         feature = _enrich_feature(gene, feature)
         features.append(feature)
 
-        association = {}
-        association['description'] = clinical['level_label']
-        association['variant_name'] = variant['name']
-        association['environmentalContexts'] = []
+        association = {
+            'description': clinical['level_label'],
+            'variant_name': variant['name'],
+            'environmentalContexts': []
+        }
         for drug in clinical['drug'].split(', '):
             association['environmentalContexts'].append({'description': drug})
         association['phenotypes'] = [{ 'description': clinical['cancerType'] }]
@@ -234,13 +236,15 @@ def convert(gene_data):
             source_url = 'http://oncokb.org/#/gene/{}/variant/{}'.format(
                 f["geneSymbol"], f["name"])
 
-        feature_association = {'genes': [gene],
-                               'features': features,
-                               'feature_names': feature_names,
-                               'association': association,
-                               'source': 'oncokb',
-                               'source_url': source_url,
-                               'oncokb': {'clinical': clinical}}
+        feature_association = {
+            'genes': [gene],
+            'features': features,
+            'feature_names': feature_names,
+            'association': association,
+            'source': 'oncokb',
+            'source_url': source_url,
+            'oncokb': {'clinical': clinical}
+        }
         yield feature_association
 
     # this section yields a feature association for the oncogenic evidence
