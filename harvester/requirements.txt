@@ -58,7 +58,6 @@ pexpect==4.3.0
 pickleshare==0.7.4
 pluggy==0.6.0
 prompt-toolkit==1.0.15
-psycopg2==2.7.3.2
 psycopg2-binary==2.7.6.1
 ptyprocess==0.5.2
 py==1.5.2
@@ -93,4 +92,5 @@ urllib3==1.22
 wcwidth==0.1.7
 webencodings==0.5.1
 widgetsnbextension==3.0.8
+xxhash==1.3.0
 yoyo-migrations==5.0.5
