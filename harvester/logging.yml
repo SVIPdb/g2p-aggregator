@@ -2,11 +2,13 @@ version: 1
 formatters:
   simple:
     format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  verbose:
+    format: '%(asctime)s (%(levelname)s), in %(pathname)s:%(lineno)s : %(message)s'
 handlers:
   console:
     class: logging.StreamHandler
     level: DEBUG
-    formatter: simple
+    formatter: verbose
     stream: ext://sys.stdout
 loggers:
   simpleExample:
