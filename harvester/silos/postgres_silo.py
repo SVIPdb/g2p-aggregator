@@ -318,9 +318,9 @@ class PostgresSilo:
                     values (%s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        'prognostic',  # FIXME: we need to determine this from the payload somehow
+                        'unknown',  # FIXME: one of predictive, diagnostic, prognostic, or predisposing; we need to determine this from the payload somehow
                         evidence.get('description'),
-                        evidence.get('publications'),
+                        evidence['info'].get('publications') if 'info' in evidence else None,
                         evidence['evidenceType'].get('sourceName') if 'evidenceType' in evidence else None,
                         evidence['evidenceType'].get('id') if 'evidenceType' in evidence else None,
                         assoc_id
