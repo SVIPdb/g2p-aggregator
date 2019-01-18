@@ -85,22 +85,14 @@ def genomic_hgvs(feature, complement=False, description=False):
 
     start = None
     end = None
-    start_i = None
-    end_i = None
-    if 'start' in feature:
-        start_i = int(feature['start'])
-        start = hgvs.location.SimplePosition(
-                base=start_i)
-    if 'end' in feature:
-        end_i = int(feature['end'])
-        end = hgvs.location.SimplePosition(
-              base=end_i)
 
-    iv = None
-    if start_i == end_i:
-        iv = hgvs.location.Interval(start=start)
-    else:
-        iv = hgvs.location.Interval(start=start, end=end)
+    if 'start' in feature:
+        start = hgvs.location.SimplePosition(base=int(feature['start']))
+
+    if 'end' in feature:
+        end = hgvs.location.SimplePosition(base=int(feature['end']))
+
+    iv = hgvs.location.Interval(start=start, end=None if start == end else end)
 
     # Make an edit object
     ref = feature.get('ref', None)
@@ -115,9 +107,7 @@ def genomic_hgvs(feature, complement=False, description=False):
         alt = _complement(alt)
 
     feature_description = feature.get('description', feature.get('name', None))
-
     edit = hgvs.edit.NARefAlt(ref=ref, alt=alt)
-
     posedit = hgvs.posedit.PosEdit(pos=iv, edit=edit)
 
     if description:
@@ -141,41 +131,40 @@ def genomic_hgvs(feature, complement=False, description=False):
 
 
 def normalize(feature):
-    if 'referenceName' not in feature or \
-       'chromosome' not in feature or 'ref' not in feature:
-            return None, None
+    if 'referenceName' not in feature or 'chromosome' not in feature or 'ref' not in feature:
+        return None, None
     if feature['chromosome'] == 'None' or feature['chromosome'] is None:
         return None, None
     if feature['ref'] == 'None' or feature['ref'] is None:
         return None, None
 
-    hgvs = genomic_hgvs(feature)
+    hgvs_rep = genomic_hgvs(feature)
     allele = None
     provenance = None
-    if hgvs:
-        (allele, provenance) = allele_registry(hgvs)
-        if ('errorType' in allele and
-                allele['errorType'] == 'IncorrectReferenceAllele'):
+
+    if hgvs_rep:
+        (allele, provenance) = allele_registry(hgvs_rep)
+
+        if 'errorType' in allele and allele['errorType'] == 'IncorrectReferenceAllele':
             message = allele['message']
             actualAllele = allele['actualAllele']
 
             complement_ref = _complement(feature['ref'])
             if complement_ref == actualAllele:
                 # print 'reverse strand re-try'
-                hgvs = genomic_hgvs(feature, complement=True)
-                (allele, provenance) = allele_registry(hgvs)
+                hgvs_rep = genomic_hgvs(feature, complement=True)
+                (allele, provenance) = allele_registry(hgvs_rep)
             # else:
             #     print 'complement_ref {} m[0] {}'.format(complement_ref,
             #                                              actualAllele)
 
-        if ('errorType' in allele and
-                allele['errorType'] == 'IncorrectHgvsPosition'):
+        if 'errorType' in allele and allele['errorType'] == 'IncorrectHgvsPosition':
             # print 'position error re-try'
-            hgvs = genomic_hgvs(feature, description=True)
-            (allele, provenance) = allele_registry(hgvs)
+            hgvs_rep = genomic_hgvs(feature, description=True)
+            (allele, provenance) = allele_registry(hgvs_rep)
 
         if allele:
-            allele['hgvs_g'] = hgvs
+            allele['hgvs_g'] = hgvs_rep
 
     return allele, provenance
 
@@ -185,6 +174,7 @@ def _apply_allele_registry(feature, allele_registry, provenance):
     links = feature.get('links', [])
     synonyms = feature.get('synonyms', [])
     links.append(allele_registry['@id'])
+
     if 'externalRecords' in allele_registry:
         externalRecords = allele_registry['externalRecords']
         links = links + [externalRecords[r][0].get('@id')
@@ -197,8 +187,7 @@ def _apply_allele_registry(feature, allele_registry, provenance):
                                ]
 
     if 'genomicAlleles' in allele_registry:
-        genomicAlleles = allele_registry['genomicAlleles']
-        for genomicAllele in genomicAlleles:
+        for genomicAllele in allele_registry['genomicAlleles']:
             synonyms = synonyms + genomicAllele['hgvs']
             links.append(genomicAllele['referenceSequence'])
 
@@ -211,6 +200,9 @@ def _apply_allele_registry(feature, allele_registry, provenance):
     if 'provenance' not in feature:
         feature['provenance'] = []
     feature['provenance'].append(provenance)
+
+    # capture the extremely useful hgvs_g field from the allele registry as well
+    feature['hgvs_g'] = allele_registry['hgvs_g']
 
 
 def _fix_location_end(feature):
@@ -233,40 +225,42 @@ def _fix_location_end(feature):
 def normalize_feature_association(feature_association):
     """ given the 'final' g2p feature_association,
     update it with genomic location """
-    allele_registry = None
+    allele_registry_instance = None
     normalized_features = []
+
     for feature in feature_association['features']:
         try:
             # ensure we have location, enrich can create new features
             enriched_features = enrich(copy.deepcopy(feature), feature_association)
+
             for enriched_feature in enriched_features:
                 # go get AR info
-                (allele_registry, provenance) = normalize(enriched_feature)
-                if allele_registry:
-                    if '@id' in allele_registry:
-                        _apply_allele_registry(enriched_feature,
-                                               allele_registry,
-                                               provenance)
+                (allele_registry_instance, provenance) = normalize(enriched_feature)
+
+                if allele_registry_instance and '@id' in allele_registry_instance:
+                    _apply_allele_registry(enriched_feature, allele_registry_instance, provenance)
+
                 enriched_feature = _fix_location_end(enriched_feature)
                 normalized_features.append(enriched_feature)
+
             feature_association['features'] = normalized_features
+
         except Exception as e:
-            logging.exception(
-                'exception {} feature {} allele {}'.format(e, feature,
-                                                           allele_registry))
+            logging.exception('exception {} feature {} allele {}'.format(e, feature, allele_registry_instance))
 
 
 def _test(feature):
-    allele_registry = normalize(feature)
-    if allele_registry and '@id' not in allele_registry:
-        print 'FAIL', allele_registry['message']
-        print "\t", allele_registry['hgvs_g']
+    allele_reg = normalize(feature)
+    if allele_reg and '@id' not in allele_reg:
+        print 'FAIL', allele_reg['message']
+        print "\t", allele_reg['hgvs_g']
         print "\t", feature
-        print "\t", allele_registry
-    elif allele_registry:
-        print 'OK', allele_registry['hgvs_g']
+        print "\t", allele_reg
+    elif allele_reg:
+        print 'OK', allele_reg['hgvs_g']
     else:
         print 'OK', 'not normalized'
+
 
 if __name__ == '__main__':
     import yaml
