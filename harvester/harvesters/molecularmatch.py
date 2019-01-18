@@ -2,11 +2,8 @@
 import requests
 import json
 import os
-import evidence_label as el
-import evidence_direction as ed
+from lookups import evidence_label as el, evidence_direction as ed
 import logging
-import mutation_type as mut
-from warnings import warn
 
 resourceURLs = {
     "assertions": "/v2/assertion/search"

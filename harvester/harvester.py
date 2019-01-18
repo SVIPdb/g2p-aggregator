@@ -189,31 +189,26 @@ class DelayedOpLogger:
 def normalize(feature_association):
     """ standard representation of drugs,disease etc. """
 
-    with DelayedOpLogger("drug_normalizer") as d:
-        drug_normalizer.normalize_feature_association(feature_association)
-        d.logdelayed(feature_association['association'].get('environmentalContexts', None))
+    # stores a list of normalizers to apply and optionally what to report on the console if they take >1sec to run
+    normalizers = [
+        (drug_normalizer, lambda logger:
+            feature_association['association'].get('environmentalContexts', None)),
+        (disease_normalizer, lambda logger:
+            feature_association['association']['phenotypes'][0]['description']
+            if 'phenotypes' in feature_association['association']
+               and len(feature_association['association']['phenotypes']) > 0 else None),
+        (oncogenic_normalizer, None),  # functionality for oncogenic_normalizer already mostly in harvesters
+        (location_normalizer, None),
+        (reference_genome_normalizer, None),
+        (biomarker_normalizer, None),
+        (gene_enricher, None)
+    ]
 
-    with DelayedOpLogger("disease_normalizer") as d:
-        disease_normalizer.normalize_feature_association(feature_association)
-        if 'phenotypes' in feature_association['association'] and \
-                len(feature_association['association']['phenotypes']) > 0:
-            d.logdelayed(feature_association['association']['phenotypes'][0]['description'])
-
-    with DelayedOpLogger("oncogenic_normalizer"):
-        # functionality for oncogenic_normalizer already mostly in harvesters
-        oncogenic_normalizer.normalize_feature_association(feature_association)
-
-    with DelayedOpLogger("location_normalizer"):
-        location_normalizer.normalize_feature_association(feature_association)
-
-    with DelayedOpLogger("reference_genome_normalizer"):
-        reference_genome_normalizer.normalize_feature_association(feature_association)
-
-    with DelayedOpLogger("biomarker_normalizer"):
-        biomarker_normalizer.normalize_feature_association(feature_association)
-
-    with DelayedOpLogger("gene_enricher"):
-        gene_enricher.normalize_feature_association(feature_association)
+    for normalizer, more in normalizers:
+        with DelayedOpLogger(normalizer.__name__) as d:
+            normalizer.normalize_feature_association(feature_association)
+            if more:
+                d.logdelayed(more(d))
 
 
 def main():

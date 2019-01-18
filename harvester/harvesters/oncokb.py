@@ -1,18 +1,14 @@
 #!/usr/bin/python
 
 from pathlib import Path
-from os.path import exists
 import pandas as pd
-import json
 import requests
-import json
-from urllib import urlencode, quote_plus
+from urllib import quote_plus
 
 import cosmic_lookup_table
 
-import evidence_label as el
-import evidence_direction as ed
-import mutation_type as mut
+from lookups import evidence_label as el, evidence_direction as ed
+from utils import str_or_none
 
 LOOKUP_TABLE = None
 

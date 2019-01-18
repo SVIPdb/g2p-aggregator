@@ -1,6 +1,5 @@
 import synapseclient
-import evidence_label as el
-import evidence_direction as ed
+from lookups import evidence_label as el, evidence_direction as ed
 
 
 def _synData():

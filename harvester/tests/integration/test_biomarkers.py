@@ -1,7 +1,6 @@
 import sys
 sys.path.append('.')  # NOQA
-import logging
-import mutation_type as mut
+from lookups import mutation_type as mut
 import os
 import requests
 import requests_cache

@@ -1,15 +1,8 @@
-
-import sys
 import re
-from lxml import html
-from lxml import etree
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from inflection import parameterize, underscore
 import json
 import logging
-import evidence_label as el
-import evidence_direction as ed
 
 import cosmic_lookup_table
 

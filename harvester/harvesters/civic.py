@@ -2,11 +2,11 @@
 
 import requests
 import copy
-import evidence_label as el
-import evidence_direction as ed
-import sys
+from lookups import evidence_label as el, evidence_direction as ed
 import logging
 from tqdm import tqdm
+
+from utils import str_or_none
 
 
 def harvest(genes):

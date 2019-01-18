@@ -1,7 +1,6 @@
 import sys
 sys.path.append('.')  # NOQA
-import json
-from mutation_type import norm_biomarker
+from lookups.mutation_type import norm_biomarker
 
 MM_MUTATION_TYPES = [
     'Block Substitution',

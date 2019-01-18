@@ -2,12 +2,9 @@
 import requests
 import json
 import os
-import evidence_label as el
-import evidence_direction as ed
+from lookups import evidence_label as el
 import logging
-from warnings import warn
 import sys
-import time
 
 DEFAULT_GENES = ['*']
 TRIAL_IDS = []

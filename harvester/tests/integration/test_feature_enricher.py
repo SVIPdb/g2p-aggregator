@@ -25,7 +25,7 @@ def test_gene_enrichment_JAK():
 
 
 def test_feature_enrichment_ALK_D1203N():
-    features = enrich({'name': "ALK D1203N "}, {})
+    features = enrich({'name': "ALK D1203N"}, {})
     assert features[0] == {'end': 29940443, 'name': 'ALK D1203N ', 'start': 29940443, 'referenceName': 'GRCh37', 'alt': u'T', 'ref': u'C', 'chromosome': '2', 'description': 'ALK D1203N ', 'provenance': ['http://myvariant.info/v1/query?q=ALK D1203N '], 'provenance_rule': 'default_feature'}
 
 

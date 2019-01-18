@@ -1,14 +1,9 @@
-import sys
 import re
 import pandas
-import json
-import copy
 import logging
 
 import cosmic_lookup_table
-import evidence_label as el
-import evidence_direction as ed
-import mutation_type as mut
+from lookups import evidence_label as el, evidence_direction as ed, mutation_type as mut
 
 LOOKUP_TABLE = None
 

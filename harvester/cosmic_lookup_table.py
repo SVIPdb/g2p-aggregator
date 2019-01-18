@@ -11,12 +11,14 @@ import pandas
 import logging
 from tqdm import tqdm
 
+
 class CosmicLookup(object):
     """
     Class that uses lookup table to return relevant information.
     """
 
     def __init__(self, lookup_table_file):
+        print "=> Opening COSMIC file %s from %s" % (lookup_table_file, __file__)
         self.lookup_table = pandas.read_csv(lookup_table_file, sep="\t")
         self.gene_df_cache = {}
 

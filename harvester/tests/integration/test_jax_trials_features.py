@@ -4,7 +4,7 @@ import json
 from feature_enricher import enrich
 from harvesters.jax_trials import _parse_profile, convert
 import cosmic_lookup_table
-import mutation_type as mut
+from lookups import mutation_type as mut
 
 JAX_TRIAL = '{"indications": [{"source": "JAX", "id": 10000003, "name": "Advanced Solid Tumor"}, {"source": "DOID", "id": 2531, "name": "hematologic cancer"}], "title": "Safety Study of Oral MGCD265 Administered Without Interruption to Subjects With Advanced Malignancies", "gender": "both", "nctId": "NCT00697632", "sponsors": "MethylGene Inc.", "recruitment": "Recruiting", "variantRequirements": "yes", "updateDate": "08/31/2015", "phase": "Phase I", "variantRequirementDetails": [{"molecularProfile": {"profileName": "MET alterations", "id": 1112}, "requirementType": "partial"}, {"molecularProfile": {"profileName": "MET positive", "id": 1240}, "requirementType": "partial"}, {"molecularProfile": {"profileName": "MET amp", "id": 1629}, "requirementType": "partial"}], "therapies": [{"id": 809, "therapyName": "Glesatinib"}]}'  # NOQA
 

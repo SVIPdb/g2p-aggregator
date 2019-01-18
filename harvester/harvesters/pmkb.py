@@ -1,11 +1,7 @@
 from __future__ import print_function
-import sys
 
-import requests
-from inflection import parameterize, underscore
 import json
-import evidence_label as el
-import evidence_direction as ed
+from lookups import evidence_label as el, evidence_direction as ed
 
 
 def harvest(genes=None):

@@ -1,10 +1,6 @@
 #!/usr/bin/python
 
 import requests
-import copy
-import evidence_label as el
-import evidence_direction as ed
-import sys
 import logging
 
 

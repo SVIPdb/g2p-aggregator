@@ -1,14 +1,10 @@
-
-import sys
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from inflection import parameterize, underscore
 import json
 import re
 
 import logging
-import evidence_label as el
-import evidence_direction as ed
+from lookups import evidence_label as el, evidence_direction as ed
 
 import cosmic_lookup_table
 from attrdict import AttrDict
