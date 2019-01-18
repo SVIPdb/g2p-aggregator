@@ -23,80 +23,79 @@ biov = Path('../data/oncokb_allAnnotatedVariants.txt')
 
 
 def harvest(genes):
-    i = 0
-    r = requests.get('http://oncokb.org/api/v1/levels')
-    levels = r.json()
+    levels = requests.get('http://oncokb.org/api/v1/levels').json()
+
     if not genes:
-        r = requests.get('http://oncokb.org/api/v1/genes')
-        all_genes = r.json()
-        genes = []
-        for gene in all_genes:
-            genes.append(gene['hugoSymbol'])
+        all_genes = requests.get('http://oncokb.org/api/v1/genes').json()
+        genes = set(gene['hugoSymbol'] for gene in all_genes)
 
     # get all variants
-    print 'gathering all OncoKB variants'
-    url = 'http://oncokb.org/api/v1/variants'
-    r = requests.get(url)
-    variants = r.json()
+    print 'Gathering all OncoKB variants'
+    variants = requests.get('http://oncokb.org/api/v1/variants').json()
 
-    if clinv.exists():
-        print 'Loading OncoKB clinical TSV'
-        # then use it to harvest from oncokb actionable
-        global v
-        v = pd.read_csv(clinv, sep='\t')
-        v = v[v['Gene'].isin(genes)]
-        cols = {'Gene': 'gene',
-                'Alteration': 'variant',
-                'Cancer Type': 'cancerType',
-                'Level': 'level',
-                'Drugs(s)': 'drug',
-                'PMIDs for drug': 'drugPmids',
-                'Abstracts for drug': 'drugAbstracts'}
-        v = v.rename(columns=cols)
-        v = v.fillna('')
-        for idx, row in v.iterrows():
-            url = 'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'
-            url = url.format(row['gene'], row['variant'])
-            r = requests.get(url)
-            for ret in r.json():
-                if str(ret['name']) == v['variant'][idx]:
-                    v.at[idx, 'variant'] = ret
+    # load clinical (aka, predictive) records
+    print 'Loading OncoKB clinical TSV'
+    # then use it to harvest from oncokb actionable
+    v = pd.read_csv(clinv, sep='\t')
+    v = v[v['Gene'].isin(genes)]
+    cols = {
+        'Gene': 'gene',
+        'Alteration': 'variant',
+        'Cancer Type': 'cancerType',
+        'Level': 'level',
+        'Drugs(s)': 'drug',
+        'PMIDs for drug': 'drugPmids',
+        'Abstracts for drug': 'drugAbstracts'
+    }
+    v = v.rename(columns=cols)
+    v = v.fillna('')
+    for idx, row in v.iterrows():
+        r = requests.get(
+            'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
+        )
+        for ret in r.json():
+            if str(ret['name']) == v['variant'][idx]:
+                v.at[idx, 'variant'] = ret
 
-    if biov.exists():
-        print 'Loading OncoKB biological TSV'
-        # then use it to harvest from oncokb biologic
-        global b
-        b = pd.read_csv(biov, sep='\t')
-        b = b[b['Gene'].isin(genes)]
-        cols = {'Gene': 'gene',
-                'Alteration': 'variant',
-                'Oncogenicity': 'oncogenic',
-                'Mutation Effect': 'mutationEffect',
-                'PMIDs for Mutation Effect': 'mutationEffectPmids',
-                'Abstracts for Mutation Effect': 'mutationEffectAbstracts'}
-        b = b.rename(columns=cols)
-        b = b.fillna('')
-        for idx, row in b.iterrows():
-            FLAG = False
-            url = 'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'
-            url = url.format(row['gene'], row['variant'])
-            r = requests.get(url)
-            for ret in r.json():
-                if str(ret['name']) == b['variant'][idx]:
-                    b.at[idx, 'variant'] = ret
-                    FLAG = True
-            if FLAG == False:
-                check = row['variant'].replace('?', ' ').split()
-                for var in variants:
-                    i = 0
-                    if var['gene']['hugoSymbol'] == row['gene']:
-                        for bits in check:
-                            if bits in var['name']:
-                                i = i + 1
-                        if i == len(check):
-                            b.at[idx, 'variant'] = var
 
-    for gene in set(genes):
+    # load biological (aka, predisposing) records
+    print 'Loading OncoKB biological TSV'
+    # then use it to harvest from oncokb biologic
+    b = pd.read_csv(biov, sep='\t')
+    b = b[b['Gene'].isin(genes)]
+    cols = {
+        'Gene': 'gene',
+        'Alteration': 'variant',
+        'Oncogenicity': 'oncogenic',
+        'Mutation Effect': 'mutationEffect',
+        'PMIDs for Mutation Effect': 'mutationEffectPmids',
+        'Abstracts for Mutation Effect': 'mutationEffectAbstracts'
+    }
+    b = b.rename(columns=cols)
+    b = b.fillna('')
+    for idx, row in b.iterrows():
+        FLAG = False
+        r = requests.get(
+            'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
+        )
+        for ret in r.json():
+            # if we find a matching variant in the api, use that instead
+            if str(ret['name']) == b['variant'][idx]:
+                b.at[idx, 'variant'] = ret
+                FLAG = True
+        if not FLAG:
+            # we didn't find a match, so
+            check = row['variant'].replace('?', ' ').split()
+            for var in variants:
+                i = 0
+                if var['gene']['hugoSymbol'] == row['gene']:
+                    for bits in check:
+                        if bits in var['name']:
+                            i = i + 1
+                    if i == len(check):
+                        b.at[idx, 'variant'] = var
+
+    for gene in genes:
         gene_data = {'gene': gene, 'oncokb': {}}
         gene_data['oncokb']['clinical'] = v[v['gene'].isin([gene])].to_dict(orient='records')
         for clinical in gene_data['oncokb']['clinical']:
@@ -118,24 +117,24 @@ def convert(gene_data):
         global LOOKUP_TABLE
         # Look up variant and add position information.
         if not LOOKUP_TABLE:
-            LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                    "./cosmic_lookup_table.tsv")
+            LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("./cosmic_lookup_table.tsv")
         matches = LOOKUP_TABLE.get_entries(gene, alteration)
         if len(matches) > 0:
             # FIXME: just using the first match for now;
             # it's not clear what to do if there are multiple matches.
             match = matches[0]
-            feature['chromosome'] = str(match['chrom'])
+            feature['chromosome'] = str_or_none(match['chrom'])
             feature['start'] = match['start']
             feature['end'] = match['end']
             feature['ref'] = match['ref']
             feature['alt'] = match['alt']
-            feature['referenceName'] = str(match['build'])
+            feature['referenceName'] = str_or_none(match['build'])
 
         return feature
 
     if 'oncokb' in gene_data:
         oncokb = gene_data['oncokb']
+
     # this section yields a feature association for the predictive evidence
     for clinical in oncokb['clinical']:
         variant = clinical['variant']
@@ -150,12 +149,15 @@ def convert(gene_data):
                     var = biological['variant']
                     gene_data = var['gene']
                     alteration = var['alteration']
-                    feature = {}
-                    feature['geneSymbol'] = gene
-                    feature['description'] = '{} {}'.format(gene, var['name'])
-                    feature['name'] = var['name']
-                    feature['entrez_id'] = gene_data['entrezGeneId']
-                    feature['biomarker_type'] = variant['consequence']['term']
+                    feature = {
+                        'geneSymbol': gene,
+                        'description': '{} {}'.format(gene, var['name']),
+                        'name': var['name'],
+                        'entrez_id': gene_data['entrezGeneId'],
+                        'refseq': str_or_none(var['gene']['curatedRefSeq']),
+                        'isoform': str_or_none(var['gene']['curatedIsoform']),
+                        'biomarker_type': variant['consequence']['term']
+                    }
                     feature = _enrich_feature(gene, feature)
                     features.append(feature)
 
@@ -164,6 +166,8 @@ def convert(gene_data):
             'name': variant['name'],
             'description': '{} {}'.format(gene, variant['name']),
             'entrez_id': gene_data['entrezGeneId'],
+            'refseq': str_or_none(variant['gene']['curatedRefSeq']),
+            'isoform': str_or_none(variant['gene']['curatedIsoform']),
             'biomarker_type': variant['consequence']['term']
         }
         feature = _enrich_feature(gene, feature)
@@ -200,6 +204,7 @@ def convert(gene_data):
                 "id": '{}-{}'.format(gene,
                                      clinical['cancerType'])
             },
+            'type': 'Predictive',  # all clinical records regard therapy, so they're all Predictive
             'description': clinical['level'],
             'info': {
                 'publications':
@@ -208,12 +213,9 @@ def convert(gene_data):
             }
         }]
         # add summary fields for Display
-        association['source_link'] = 'http://oncokb.org/#/gene/{}/variant/{}'.format(gene,
-                                     quote_plus(variant['name']))
-        association = el.evidence_label(clinical['level'],
-                                        association, na=True)
-        association = ed.evidence_direction(clinical['level_label'],
-                                            association, na=True)
+        association['source_link'] = 'http://oncokb.org/#/gene/{}/variant/{}'.format(gene, quote_plus(variant['name']))
+        association = el.evidence_label(clinical['level'], association, na=True)
+        association = ed.evidence_direction(clinical['level_label'], association, na=True)
 
         if len(clinical['drugAbstracts']) > 0:
             association['publication_url'] = clinical['drugAbstracts'][0]['link']  # NOQA
@@ -223,14 +225,12 @@ def convert(gene_data):
                 break
 
         association['drug_labels'] = ','.join([drug for drug in clinical['drug']])   # NOQA
-        feature_names = ', '.join(['{}:{}'.format(
-                                f["geneSymbol"], f["name"]) for f in features])
+        feature_names = ', '.join(['{}:{}'.format(f["geneSymbol"], f["name"]) for f in features])
 
         source_url = None
         if len(features) > 0:
             f = features[0]
-            source_url = 'http://oncokb.org/#/gene/{}/variant/{}'.format(
-                f["geneSymbol"], f["name"])
+            source_url = 'http://oncokb.org/#/gene/{}/variant/{}'.format(f["geneSymbol"], f["name"])
 
         feature_association = {
             'genes': [gene],
@@ -249,34 +249,36 @@ def convert(gene_data):
         gene_data = variant['gene']
         alteration = variant['alteration']
 
-        feature = {}
-        feature['geneSymbol'] = gene
-        feature['name'] = variant['name']
-        feature['description'] = '{} {}'.format(gene.encode('utf8'),
-                                                variant['name'].encode('utf8'))
-        feature['entrez_id'] = gene_data['entrezGeneId']
-        feature['biomarker_type'] = variant['consequence']['term']
+        feature = {
+            'geneSymbol': gene,
+            'name': variant['name'],
+            'description': '{} {}'.format(gene.encode('utf8'), variant['name'].encode('utf8')),
+            'entrez_id': gene_data['entrezGeneId'],
+            'refseq': str_or_none(variant['gene']['curatedRefSeq']),
+            'isoform': str_or_none(variant['gene']['curatedIsoform']),
+            'biomarker_type': variant['consequence']['term']
+        }
 
         # Look up variant and add position information.
         if not LOOKUP_TABLE:
-            LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                    "./cosmic_lookup_table.tsv")
+            LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("./cosmic_lookup_table.tsv")
         matches = LOOKUP_TABLE.get_entries(gene, alteration)
         if len(matches) > 0:
             # FIXME: just using the first match for now;
             # it's not clear what to do if there are multiple matches.
             match = matches[0]
-            feature['chromosome'] = str(match['chrom'])
+            feature['chromosome'] = str_or_none(match['chrom'])
             feature['start'] = match['start']
             feature['end'] = match['end']
             feature['ref'] = match['ref']
             feature['alt'] = match['alt']
-            feature['referenceName'] = str(match['build'])
+            feature['referenceName'] = str_or_none(match['build'])
 
-        association = {}
-        association['variant_name'] = variant['name']
-        association['description'] = variant['consequence']['description']
-        association['environmentalContexts'] = []
+        association = {
+            'variant_name': variant['name'],
+            'description': variant['consequence']['description'],
+            'environmentalContexts': []
+        }
 
         if biological['oncogenic'] in ['Likely Oncogenic', 'Oncogenic']:
             association['phenotypes'] = [{'description': 'cancer'}]
@@ -287,6 +289,7 @@ def convert(gene_data):
                 "id": '{}-{}'.format(gene,
                                      biological['oncogenic'])
             },
+            'type': 'Predisposing',  # all biological records regard pathogenicity, so they're all Predisposing
             'description': biological['mutationEffect'],
             'info': {
                 'publications':
@@ -294,15 +297,6 @@ def convert(gene_data):
                         for Pmid in biological['mutationEffectPmids'].split(', ')]
             }
         }]
-        # add summary fields for Display
-        # print variant['name']
-        # print variant['name'].__class__
-        # print gene
-        # print gene.__class__
-        #
-        # association['source_link'] = \
-        #     'http://oncokb.org/#/gene/{}/variant/{}' \
-        #     .format(gene, urlencode(str(variant['name'])))
 
         association['oncogenic'] = biological['oncogenic']
         association['evidence_label'] = None
@@ -317,13 +311,15 @@ def convert(gene_data):
         source_url = 'http://oncokb.org/#/gene/{}/variant/{}'.format(
             feature["geneSymbol"].encode('utf8'), feature["name"].encode('utf8'))
 
-        feature_association = {'genes': [gene],
-                               'features': [feature],
-                               'feature_names': feature_names,
-                               'association': association,
-                               'source': 'oncokb',
-                               'source_url': source_url,
-                               'oncokb': {'biological': biological}}
+        feature_association = {
+            'genes': [gene],
+            'features': [feature],
+            'feature_names': feature_names,
+            'association': association,
+            'source': 'oncokb',
+            'source_url': source_url,
+            'oncokb': {'biological': biological}
+        }
         yield feature_association
 
 

@@ -18,7 +18,7 @@ def harvest(genes):
             variants = record['variants']
             gene = record['name']
             variants_details = []
-            for variant in variants:
+            for variant in tqdm(variants, desc="fetching civic variant data for %s" % gene):
                 r = requests.get('https://civic.genome.wustl.edu/api/variants/{}'.format(variant['id']))   # NOQA
                 variants_details.append(r.json())
             gene_data = {'gene': gene, 'civic': {'variants': variants_details}}
@@ -33,7 +33,7 @@ def harvest(genes):
             else:
                 variants = r.json()['variants']
                 variants_details = []
-                for variant in tqdm(variants, desc="fetching civic variant data"):
+                for variant in tqdm(variants, desc="fetching civic variant data for %s" % gene):
                     r = requests.get('https://civic.genome.wustl.edu/api/variants/{}'.format(variant['id']))   # NOQA
                     variants_details.append(r.json())
                 gene_data = {'gene': gene,
@@ -51,13 +51,19 @@ def convert(gene_data):
                 'entrez_id': variant['entrez_id'],
                 'start': variant['coordinates']['start'],
                 'end': variant['coordinates']['stop'],
-                'referenceName': str(variant['coordinates']['reference_build']),
-                'chromosome': str(variant['coordinates']['chromosome']),
-                'ref': str(variant['coordinates']['reference_bases']),
-                'alt': str(variant['coordinates']['variant_bases']),
+                'referenceName': str_or_none(variant['coordinates']['reference_build']),
+                'refseq': None,
+                'isoform': str_or_none(variant['coordinates']['representative_transcript']),
+                'chromosome': str_or_none(variant['coordinates']['chromosome']),
+                'ref': str_or_none(variant['coordinates']['reference_bases']),
+                'alt': str_or_none(variant['coordinates']['variant_bases']),
                 'name': variant['name'],
                 'description': '{} {}'.format(variant['entrez_name'], variant['name'])
             }
+
+            # debugging
+            # if variant['name'] == 'N842S':
+            #     print "****: %s" % str(variant)
 
             if 'variant_types' in variant and len(variant['variant_types']) > 0:
                 feature['biomarker_type'] = variant['variant_types'][0]['display_name']
@@ -66,7 +72,7 @@ def convert(gene_data):
                 association = {}
 
                 for part in variant['name'].split():
-                    if not '-' in part and not part == variant['entrez_name']:
+                    if '-' not in part and not part == variant['entrez_name']:
                         association['variant_name'] = part
 
                 association['description'] = evidence_item['description']
@@ -90,6 +96,7 @@ def convert(gene_data):
                         "sourceName": "CIVIC",
                         "id": '{}'.format(evidence_item['id'])
                     },
+                    'type': evidence_item.get('evidence_type'),
                     'description': evidence_item['clinical_significance'],
                     'info': {
                         'publications': [
@@ -119,7 +126,7 @@ def convert(gene_data):
                 source_url = "https://civicdb.org/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(
                     variant['gene_id'], variant['id'], evidence_item['id'])  # NOQA
 
-                feature_association = {
+                feat_assoc = {
                     'genes': [gene_data['gene']],
                     'features': [feature],
                     'feature_names': evidence_item['name'],
@@ -129,19 +136,19 @@ def convert(gene_data):
                     'civic': v
                 }
 
-                yield feature_association
+                yield feat_assoc
 
     except Exception as e:
-        logging.error(gene_data['gene'], exc_info=1)
+        logging.error(gene_data['gene'], exc_info=1, ex=e)
 
 
 def harvest_and_convert(genes):
     """ get data from civic, convert it to ga4gh and return via yield """
     for gene_data in harvest(genes):
         # print "harvester_yield {}".format(gene_data.keys())
-        for feature_association in convert(gene_data):
+        for feat_assoc in convert(gene_data):
             # print "convert_yield {}".format(feature_association.keys())
-            yield feature_association
+            yield feat_assoc
 
 
 # main

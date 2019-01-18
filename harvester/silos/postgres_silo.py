@@ -202,6 +202,8 @@ class PostgresSilo:
             gene_id = _get_or_insert(curs, "api_gene", {
                 'entrez_id': int(gene['entrez_id']),
                 'ensembl_gene_id': gene['ensembl_gene_id'],
+                'uniprot_ids': gene['uniprot_ids'],
+                'location': gene['location'],
                 'symbol': gene['symbol']
             }, append_cols={'sources': feature_assocation['source']})
             genes_to_ids[gene['symbol']] = gene_id
@@ -223,7 +225,20 @@ class PostgresSilo:
                 'gene_id': genes_to_ids[feat['geneSymbol']],
                 'name': feat['name'],
                 'description': feat.get('description'),
+                'reference_name': feat.get('referenceName'),
+                'refseq': feat.get('refseq'),
+                'isoform': feat.get('isoform'),
                 'biomarker_type': feat.get('biomarker_type'),
+
+                # position/change info
+                'chromosome': feat.get('chromosome'),
+                'start_pos': feat.get('start'),
+                'end_pos': feat.get('end'),
+                'ref': feat.get('ref'),
+                'alt': feat.get('alt'),
+
+                # hgvs coordinates
+                'hgvs_g': feat.get('hgvs_g')
             }
 
             if 'sequence_ontology' in feat:
@@ -234,6 +249,12 @@ class PostgresSilo:
                     'soid': seq_ont['soid'],
                     'so_name': seq_ont['name']
                 })
+
+            # FIXME: different data sources have different ways of referencing the same variant, sadly
+            # we should be able to support the following disambiguations:
+            # 1. the same protein-level change (e.g., V600E and Val600Glu or p.Val600Glu)
+            # 2. the same SNP (e.g. c.1779T>A)
+            # 3. hgvs string matches without reference sequences
 
             variant_id = _get_or_insert(
                 curs, "api_variant", var_obj,
@@ -318,7 +339,7 @@ class PostgresSilo:
                     values (%s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        'unknown',  # FIXME: one of predictive, diagnostic, prognostic, or predisposing; we need to determine this from the payload somehow
+                        evidence.get('type', 'unknown'),  # one of predictive, diagnostic, prognostic, or predisposing; we need to determine this from the payload somehow
                         evidence.get('description'),
                         evidence['info'].get('publications') if 'info' in evidence else None,
                         evidence['evidenceType'].get('sourceName') if 'evidenceType' in evidence else None,
