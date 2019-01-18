@@ -4,29 +4,26 @@ import logging
 import re
 
 
+def reference_names(n):
+    return {
+        '37': 'GRCh37',
+        37: 'GRCh37',
+        'Hg37': 'GRCh37',
+        'GRCh37/hg19': 'GRCh37',
+        'grch37_hg19': 'GRCh37',
+        'Hg38': 'GRCh38',
+        '38': 'GRCh38',
+        38: 'GRCh38'
+    }.get(n, n)
+
+
 def normalize(name):
     try:
         name = name.encode('utf8')
     except Exception as e:
         pass
 
-    def referenceNames(n):
-        return {
-            '37': 'GRCh37',
-            37: 'GRCh37',
-            'Hg37': 'GRCh37',
-            'GRCh37/hg19': 'GRCh37',
-            'grch37_hg19': 'GRCh37',
-            'Hg38': 'GRCh38',
-            '38': 'GRCh38',
-            38: 'GRCh38'
-        }.get(n, n)
-
-    if name:
-        normalized_name = referenceNames(name)
-        if normalized_name:
-            name = normalized_name
-    return name
+    return reference_names(name)
 
 
 def normalize_feature_association(feature_association):
@@ -35,6 +32,7 @@ def normalize_feature_association(feature_association):
     # nothing to read?, return
     if 'features' not in feature_association:
         return
+
     for feature in feature_association['features']:
         if 'referenceName' in feature:
             feature['referenceName'] = normalize(feature['referenceName'])
