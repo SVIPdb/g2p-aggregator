@@ -8,9 +8,9 @@ from urllib import quote_plus
 import cosmic_lookup_table
 
 from lookups import evidence_label as el, evidence_direction as ed
+from normalizers.gene_enricher import get_gene
 from utils import str_or_none
 
-LOOKUP_TABLE = None
 
 # OncoKB harvester now pulls from the below downloadable OncoKB files
 # and supplements with additional variant data pulled from their public
@@ -20,6 +20,10 @@ LOOKUP_TABLE = None
 # pulled from the private API.
 clinv = Path('../data/oncokb_allActionableVariants.txt')
 biov = Path('../data/oncokb_allAnnotatedVariants.txt')
+
+
+# used to get COSMIC info about genes/alterations
+LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("./cosmic_lookup_table.tsv")
 
 
 def harvest(genes):
@@ -108,29 +112,30 @@ def harvest(genes):
         yield gene_data
 
 
+def _enrich_feature(gene, alteration, feature):
+    matches = LOOKUP_TABLE.get_entries(gene, alteration)
+
+    if len(matches) > 0:
+        # FIXME: just using the first match for now;
+        # it's not clear what to do if there are multiple matches.
+        match = matches[0]
+        feature['chromosome'] = str_or_none(match['chrom'])
+        feature['start'] = match['start']
+        feature['end'] = match['end']
+        feature['ref'] = match['ref']
+        feature['alt'] = match['alt']
+        feature['referenceName'] = str_or_none(match['build'])
+    else:
+        # attempt to use the gene info to get some info, e.g. the chromosome, at least
+        gene_meta = get_gene(gene)
+        feature['chromosome'] = gene_meta[0]['chromosome']
+
+    return feature
+
+
 def convert(gene_data):
-    global LOOKUP_TABLE
     gene = gene_data['gene']
     oncokb = {'clinical': [], 'biological': []}
-
-    def _enrich_feature(gene, feature):
-        global LOOKUP_TABLE
-        # Look up variant and add position information.
-        if not LOOKUP_TABLE:
-            LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("./cosmic_lookup_table.tsv")
-        matches = LOOKUP_TABLE.get_entries(gene, alteration)
-        if len(matches) > 0:
-            # FIXME: just using the first match for now;
-            # it's not clear what to do if there are multiple matches.
-            match = matches[0]
-            feature['chromosome'] = str_or_none(match['chrom'])
-            feature['start'] = match['start']
-            feature['end'] = match['end']
-            feature['ref'] = match['ref']
-            feature['alt'] = match['alt']
-            feature['referenceName'] = str_or_none(match['build'])
-
-        return feature
 
     if 'oncokb' in gene_data:
         oncokb = gene_data['oncokb']
@@ -158,7 +163,7 @@ def convert(gene_data):
                         'isoform': str_or_none(var['gene']['curatedIsoform']),
                         'biomarker_type': variant['consequence']['term']
                     }
-                    feature = _enrich_feature(gene, feature)
+                    feature = _enrich_feature(gene, alteration, feature)
                     features.append(feature)
 
         feature = {
@@ -170,7 +175,7 @@ def convert(gene_data):
             'isoform': str_or_none(variant['gene']['curatedIsoform']),
             'biomarker_type': variant['consequence']['term']
         }
-        feature = _enrich_feature(gene, feature)
+        feature = _enrich_feature(gene, alteration, feature)
         features.append(feature)
 
         association = {
@@ -260,19 +265,7 @@ def convert(gene_data):
         }
 
         # Look up variant and add position information.
-        if not LOOKUP_TABLE:
-            LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("./cosmic_lookup_table.tsv")
-        matches = LOOKUP_TABLE.get_entries(gene, alteration)
-        if len(matches) > 0:
-            # FIXME: just using the first match for now;
-            # it's not clear what to do if there are multiple matches.
-            match = matches[0]
-            feature['chromosome'] = str_or_none(match['chrom'])
-            feature['start'] = match['start']
-            feature['end'] = match['end']
-            feature['ref'] = match['ref']
-            feature['alt'] = match['alt']
-            feature['referenceName'] = str_or_none(match['build'])
+        feature = _enrich_feature(gene, alteration, feature)
 
         association = {
             'variant_name': variant['name'],
@@ -320,6 +313,7 @@ def convert(gene_data):
             'source_url': source_url,
             'oncokb': {'biological': biological}
         }
+
         yield feature_association
 
 

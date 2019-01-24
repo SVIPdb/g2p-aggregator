@@ -6,6 +6,7 @@ from lookups import evidence_label as el, evidence_direction as ed
 import logging
 from tqdm import tqdm
 
+from normalizers.gene_enricher import get_gene
 from utils import str_or_none
 
 
@@ -45,6 +46,11 @@ def convert(gene_data):
     """ given gene data from civic, convert it to ga4gh """
     try:
         variants = gene_data['civic']['variants']
+
+        # we can get some coarse location info, e.g. the chromosome, from the gene symbol itself
+        # we'll retrieve that as a failover in case the civic entry is missing that info
+        gene_meta = get_gene(gene_data['gene'])[0]
+
         for variant in variants:
             feature = {
                 'geneSymbol': variant['entrez_name'],
@@ -61,9 +67,9 @@ def convert(gene_data):
                 'description': '{} {}'.format(variant['entrez_name'], variant['name'])
             }
 
-            # debugging
-            # if variant['name'] == 'N842S':
-            #     print "****: %s" % str(variant)
+            # if our feature is lacking information we can infer from the gene metadata, fill that in
+            if not feature['chromosome'] and gene_meta['chromosome']:
+                feature['chromosome'] = gene_meta['chromosome']
 
             if 'variant_types' in variant and len(variant['variant_types']) > 0:
                 feature['biomarker_type'] = variant['variant_types'][0]['display_name']
@@ -119,10 +125,12 @@ def convert(gene_data):
                 association['publication_url'] = evidence_item['source']['source_url'],  # NOQA
                 if len(evidence_item['drugs']) > 0:
                     association['drug_labels'] = ','.join([drug['name'] for drug in evidence_item['drugs']])  # NOQA
+
                 # create snapshot of original data
                 v = copy.deepcopy(variant)
                 del v['evidence_items']
                 v['evidence_items'] = [evidence_item]
+
                 source_url = "https://civicdb.org/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(
                     variant['gene_id'], variant['id'], evidence_item['id'])  # NOQA
 

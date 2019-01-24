@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+import re
 import sys
 import json
 import csv
@@ -26,6 +27,9 @@ data = json.load(open('../data/non_alt_loci_set.json'))
 # # it seems that reviewed entries tend to have a valid PIR column and unreviewed ones don't)
 # uniprot_map = dict((r[2], r[0]) for r in uniprot_fp if r[11])
 
+
+chromosome_extractor = re.compile(r'^([0-9XY]+)')
+
 for doc in data['response']['docs']:
     entrez_id = doc.get('entrez_id', None)
     gene = {
@@ -36,6 +40,11 @@ for doc in data['response']['docs']:
         'uniprot_ids': doc.get('uniprot_ids', None)
     }
     GENES[doc['symbol']] = [gene]
+
+    if gene['location']:
+        result = chromosome_extractor.match(gene['location'])
+        if result:
+            gene['chromosome'] = result.group(0)
 
     if gene['ensembl_gene_id']:
         ALIASES[gene['ensembl_gene_id']].append(gene)
@@ -70,6 +79,6 @@ def normalize_feature_association(feature_association):
             gene = get_gene(gene_symbol)
         except:
             gene = None
-        if (gene):
+        if gene:
             gene_identifiers.extend(gene)
     feature_association['gene_identifiers'] = gene_identifiers
