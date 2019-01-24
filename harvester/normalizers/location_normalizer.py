@@ -1,3 +1,5 @@
+import traceback
+
 import requests
 import re
 import logging
@@ -8,7 +10,21 @@ import hgvs.location
 import hgvs.posedit
 import hgvs.edit
 from hgvs.sequencevariant import SequenceVariant
+import hgvs.dataproviders.uta
+import hgvs.assemblymapper
+
 from feature_enricher import enrich
+
+from normalizers.reference_genome_normalizer import normalize as normalize_referencename
+
+
+# these shared assembly mappers will allow us to convert HGVS g. variants to c. and p. later on
+hdp = hgvs.dataproviders.uta.connect()
+hgnorm = hgvs.normalizer.Normalizer(hdp)
+am = {
+    'GRCh37': hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh37', normalize=True),
+    'GRCh38': hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh38', normalize=True)
+}
 
 
 def _complement(bases):
@@ -92,7 +108,7 @@ def genomic_hgvs(feature, complement=False, description=False):
     if 'end' in feature:
         end = hgvs.location.SimplePosition(base=int(feature['end']))
 
-    iv = hgvs.location.Interval(start=start, end=None if start == end else end)
+    iv = hgvs.location.Interval(start=start, end=end)
 
     # Make an edit object
     ref = feature.get('ref', None)
@@ -124,10 +140,8 @@ def genomic_hgvs(feature, complement=False, description=False):
     # Make the variant
     var = SequenceVariant(ac=ac, type='g', posedit=posedit)
     # https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37.p13
-    try:
-        return str(var)
-    except Exception as e:
-        return None
+
+    return var
 
 
 def normalize(feature):
@@ -143,7 +157,7 @@ def normalize(feature):
     provenance = None
 
     if hgvs_rep:
-        (allele, provenance) = allele_registry(hgvs_rep)
+        (allele, provenance) = allele_registry(str(hgvs_rep))
 
         if 'errorType' in allele and allele['errorType'] == 'IncorrectReferenceAllele':
             message = allele['message']
@@ -153,7 +167,7 @@ def normalize(feature):
             if complement_ref == actualAllele:
                 # print 'reverse strand re-try'
                 hgvs_rep = genomic_hgvs(feature, complement=True)
-                (allele, provenance) = allele_registry(hgvs_rep)
+                (allele, provenance) = allele_registry(str(hgvs_rep))
             # else:
             #     print 'complement_ref {} m[0] {}'.format(complement_ref,
             #                                              actualAllele)
@@ -161,10 +175,30 @@ def normalize(feature):
         if 'errorType' in allele and allele['errorType'] == 'IncorrectHgvsPosition':
             # print 'position error re-try'
             hgvs_rep = genomic_hgvs(feature, description=True)
-            (allele, provenance) = allele_registry(hgvs_rep)
+            (allele, provenance) = allele_registry(str(hgvs_rep))
 
         if allele:
-            allele['hgvs_g'] = hgvs_rep
+            # hgvs_rep = hgnorm.normalize(hgvs_rep)
+            allele['hgvs_g'] = str(hgvs_rep)
+
+            # also use the variant mapper to convert hgvs_rep to the c. and p. versions as well, if possible
+            # to accomplish that, we'll need the reference sequence. in this case, the hgvs coordinates are more
+            # stringently validated than for genomic coords (e.g., delins position coords have to match the edit length)
+            normal_reference_name = normalize_referencename(feature['referenceName'])
+            if feature['refseq']:
+                try:
+                    var_c = am[normal_reference_name].g_to_c(hgvs_rep, tx_ac=feature['refseq'])
+                    allele['hgvs_c'] = str(var_c)
+
+                    if var_c:
+                        var_p = am[normal_reference_name].c_to_p(var_c)
+                        var_p.posedit.uncertain = False
+                        allele['hgvs_p'] = str(var_p)
+                except Exception as e:
+                    logging.warn(
+                        "Couldn't produce HGVS c. and p. strings for g. string '%s' with assembly/refseq '%s'/'%s'" %
+                        (allele['hgvs_g'], normal_reference_name, feature['refseq']))
+                    logging.warn("Traceback: %s" % traceback.format_exc())
 
     return allele, provenance
 
@@ -186,6 +220,12 @@ def _apply_allele_registry(feature, allele_registry, provenance):
                                if 'id' in externalRecords[r][0]
                                ]
 
+        # get the dbsnp IDs and myvariant URL from the allele registry, too, if possible
+        if 'dbSNP' in externalRecords:
+            feature['dbsnp_ids'] = [str(x['rs']) for x in externalRecords['dbSNP']]
+        if 'MyVariantInfo_hg19' in externalRecords and len(externalRecords['MyVariantInfo_hg19']) > 0:
+            feature['myvariant_hg19'] = externalRecords['MyVariantInfo_hg19'][0]['@id']
+
     if 'genomicAlleles' in allele_registry:
         for genomicAllele in allele_registry['genomicAlleles']:
             synonyms = synonyms + genomicAllele['hgvs']
@@ -203,6 +243,9 @@ def _apply_allele_registry(feature, allele_registry, provenance):
 
     # capture the extremely useful hgvs_g field from the allele registry as well
     feature['hgvs_g'] = allele_registry['hgvs_g']
+    # also try to get hgvs_c, hgvs_p, but they may not be available if assemblymapper fails
+    feature['hgvs_c'] = allele_registry.get('hgvs_c')
+    feature['hgvs_p'] = allele_registry.get('hgvs_p')
 
 
 def _fix_location_end(feature):

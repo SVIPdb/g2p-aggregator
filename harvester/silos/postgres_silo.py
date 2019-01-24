@@ -9,7 +9,7 @@ import psycopg2
 from psycopg2 import sql
 
 
-VERBOSE = False
+VERBOSE = True
 
 
 def populate_args(argparser):
@@ -28,7 +28,7 @@ def populate_args(argparser):
                            default='db')
 
 
-def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None):
+def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, merge_existing=False):
     """
     Helper method for performing an idempotent insert; it always returns the key of the matched item,
     whether it already existed or had to insert it.
@@ -47,13 +47,17 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None):
     if key_cols is None:
         key_cols = params
 
-    # initially we don't know the gene_id, or even if it exists yet
-    gene_id = None
+    # initially we don't know the entry's id, or even if it exists yet
+    entry_id = None
 
-    # the call to every() below determines if there's a single column in the appends that doesn't have the source
-    # already set. if there is, we have to peform a full update to all append columns
+    # this checks if there's an existing variant with columns/values specified in key_cols
+    # we also check if it already has the sources we'd append via append_cols; if it does, we don't need to update it
+    # the complete sql looks something like:
+    #  "select id, (sources ? 'civic' and ...) as no_update_needed from api_variant where keyA=valA and..."
+    # FIXME: we may actually still need to update it (e.g. if we have non-null new values for existing missing ones), so
+    #  maybe we should always do the append since it's idempotent
     cond = sql.SQL(' and ').join(map(lambda x: sql.Identifier(x) + sql.SQL("=") + sql.Placeholder(), key_cols.keys()))
-    check_stmt = sql.SQL('select id, ({}) as no_update_needed from {} where {}').format(
+    check_stmt = sql.SQL('select id, ({}) as no_update_needed, sources from {} where {}').format(
         sql.SQL(' and ').join(map(
             lambda k: sql.SQL("{} ? {}").format(sql.Identifier(k), sql.Literal(append_cols[k])),
             append_cols.keys()
@@ -70,18 +74,34 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None):
     result = curs.fetchone()
 
     if result is not None:
+        # TODO: perhaps we merge only if we're adding from a new source, since ostensibly
+        #  the same source will have the same info for genes/variants across evidence items.
+        #  that would require a bit of coupling to the table spec, specifically checking the sources
+        #  before flagging for a merge
+
+        if append_cols:
+            new_source = append_cols['sources']
+            existing_sources = result[2]
+
+            if merge_existing and 'name' in params:
+                logging.info("*** Merging existing variant %s (%s) with new data from %s" %
+                             (params['name'], existing_sources, new_source))
+
+        # it does exist, so retrieve its identifying info
         if VERBOSE:
             logging.info("result: %s" % str(result))
 
-        gene_id = result[0]
+        entry_id = result[0]
         update_required = not result[1]
 
-        if append_cols is not None and update_required:
-            # it did exist, so we need to update its append_cols columns with whatever we're supposed to append to them
-            # update mytable set somecol=somecol||{"newval":null} effectively appends newval to the set somecol
-            update_stmt = sql.SQL('update {} set {} where id={}').format(
-                sql.Identifier(target_table),
-                sql.SQL(',').join(map(
+        # and if we have append_cols that need to be updated, do so
+        if (append_cols is not None and update_required) or merge_existing:
+            # construct the 'append' part of the update if there are set fields that we need to append to
+            # we assume our append_cols are jsonb values that we're treating as sets, where the keys are the items in
+            #  the set and the values are 'null'.
+            # jsonb_set(a, b, 'null', TRUE) results in a's keys being merged with b's.
+            append_part = (
+                map(
                     lambda x: (
                         sql.SQL("{}=jsonb_set({}, '{}', 'null', TRUE)").format(
                             sql.Identifier(x),
@@ -90,15 +110,48 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None):
                         )
                     ),
                     append_cols.keys()
-                )),
-                sql.Literal(gene_id)
+                )
+            ) if append_cols is not None and update_required else []
+
+            # construct the 'merge' part of the query if merge_existing is true
+            if merge_existing:
+                merge_items = [p for p in params.items() if p[0] not in key_cols.keys()]
+                merge_part = (
+                    map(
+                        lambda x: (
+                            sql.SQL("{}=coalesce({}, {})").format(
+                                sql.Identifier(x),
+                                sql.Identifier(x),
+                                sql.Placeholder()
+                            )
+                        ),
+                        [p[0] for p in merge_items]
+                    )
+                )
+            else:
+                merge_items = None
+                merge_part = []
+
+            # finally perform the update, which may append to sets or merge fields
+            update_stmt = sql.SQL('update {} set {} where id={}').format(
+                sql.Identifier(target_table),
+                sql.SQL(',').join(append_part + merge_part),
+                sql.Literal(entry_id)
             )
+
             if VERBOSE:
                 logging.info(update_stmt.as_string(curs))
-            curs.execute(update_stmt)
+
+            if merge_existing:
+                # we fill out the merge columns with new values coalesced with the old ones
+                curs.execute(update_stmt, [p[1] for p in merge_items])
+            else:
+                # we're only appending to columns, in which case the appended items are embedded in the query
+                curs.execute(update_stmt)
 
     else:
         # ...it doesn't exist, so insert it and get its resulting id
+
         # add in the append columns to the params since we're creating this thing now
         for col in append_cols:
             params[col] = '{"%s":null}' % append_cols[col]
@@ -111,9 +164,9 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None):
         if VERBOSE:
             logging.info(insert_stmt.as_string(curs))
         curs.execute(insert_stmt, params.values())
-        gene_id = curs.fetchone()[0]
+        entry_id = curs.fetchone()[0]
 
-    return gene_id
+    return entry_id
 
 
 class PostgresSilo:
@@ -188,6 +241,10 @@ class PostgresSilo:
         # caveats:
         # 1) this code should be capable of ensuring that the hierarchy can be built incrementally,
         #    e.g., we should insert a previously unseen gene first, then hook up the variant to that new instance
+        #    (note 1a: b/c of that, we encounter a variant once per *evidence item*; we might reconsider updating
+        #     the variant's information with each evidence item encounter, since that could get ridiculous...)
+        #    (note 1b: perhaps we should merge variants upstream and pass this sets of evidence items per variant?)
+        #    (note 1c: maybe we only merge a variant's info if we haven't previously merged that source?)
         # 2) we're splitting the dict into multiple tables, so some inserts might succeed even if the whole dict
         #    can't be inserted. do we fail cleanly and revert all changes in that case, or do we just try to insert
         #    what we can?
@@ -222,8 +279,10 @@ class PostgresSilo:
         for feat in feature_assocation['features']:
             # insert a variant keyed to this gene_id
             var_obj = {
+                # these two are used as 'key cols' that we use to match variants between sources
                 'gene_id': genes_to_ids[feat['geneSymbol']],
                 'name': feat['name'],
+
                 'description': feat.get('description'),
                 'reference_name': feat.get('referenceName'),
                 'refseq': feat.get('refseq'),
@@ -238,11 +297,16 @@ class PostgresSilo:
                 'alt': feat.get('alt'),
 
                 # hgvs coordinates
-                'hgvs_g': feat.get('hgvs_g')
+                'hgvs_g': feat.get('hgvs_g'),
+                'hgvs_c': feat.get('hgvs_c'),
+                'hgvs_p': feat.get('hgvs_p'),
+
+                'dbsnp_ids': feat.get('dbsnp_ids'),
+                'myvariant_hg19': feat.get('myvariant_hg19')
             }
 
             if 'sequence_ontology' in feat:
-                # in nearly all cases this is included, but there'sa civic entry that's missing it for some reason
+                # in nearly all cases this is included, but there's a civic entry that's missing it for some reason
                 seq_ont = feat['sequence_ontology']
                 var_obj.update({
                     'so_hierarchy': seq_ont.get('hierarchy'),
@@ -264,7 +328,8 @@ class PostgresSilo:
                     # 'biomarker_type': var_obj['biomarker_type']
                     # FIXME: the above might identify differences in punctuation or case as different variants...
                     # ^ this is in fact the case, e.g. "missense_variant" (oncokb) vs. "Missense Variant" (civic)
-                }, append_cols={'sources': feature_assocation['source']}
+                }, append_cols={'sources': feature_assocation['source']},
+                merge_existing=True
             )
 
             variants_to_ids[feat['name']] = variant_id
@@ -304,10 +369,6 @@ class PostgresSilo:
 
         # get the association object id so we can tie any phenotypes, evidence entries, and env. contexts to it
         assoc_id = curs.fetchone()[0]
-
-        # we can't continue unless we created an association object
-        # FIXME: replace with a proper exception and handler later
-        assert assoc_id is not None
 
         # --------------------------------------------------------------------------------
         # stage 4. insert phenotypes, evidence items, and contexts that are associated with the variant
@@ -380,12 +441,7 @@ class PostgresSilo:
                     # we may also run harvesters in parallel, in which case we may prefer less contention between
                     # long-running transactions
                     for feature_association in source_feats:
-                        try:
-                            self._save_one(curs, feature_association)
-                        except Exception as ex:
-                            print(str(ex))
-                            import ipdb
-                            ipdb.set_trace()
+                        self._save_one(curs, feature_association)
                             
                 conn.commit()
 
