@@ -196,12 +196,17 @@ def enrich(feature, feature_association):
         # apply rules
         description_parts = re.split(' +', feature['description'].strip())
         source = feature_association['source'] if 'source' in feature_association else None
-        exonMatch = re.match(r'.* Exon ([0-9]*) .*', feature['name'], re.M|re.I)
+        exonMatch = re.match(r'.* Exon ([0-9]*) .*', feature['name'], re.M|re.I)  # re.M,I: multiline, ignore case
         feat_desc_lc = feature['description'].lower()
 
         enriched_features = []
 
         if not _is_gene([description_parts[0]]) and len(description_parts[0].split('-')) == 2 and _is_gene(description_parts[0].split('-')):
+            # it's a fusion, e.g. BRAF-EGFR etc.
+            # we determine that by first checking if the thing isn't a gene as a whole ("BRAF-EGFR" is of course not),
+            # then by checking if we get exactly two pieces when we split it on the hyphen,
+            # then by checking if each piece *is* a gene
+
             # split out the fusion donor, acceptor and enrich gene information for each one individually
             fusion_donor, fusion_acceptor = description_parts[0].split('-')
 
@@ -214,24 +219,30 @@ def enrich(feature, feature_association):
             enriched_features.append(feature_fusion_acceptor)
 
         elif len(description_parts) == 1:
+            # it's just a gene name, e.g. "EGFR"; we can only report info about the gene
             feature = _enrich_gene(feature, provenance_rule='gene_only')
             enriched_features.append(feature)
 
         elif ('oncokb' == source and 'clinical' in feature_association['oncokb'] and
               exonMatch and 'Isoform' in feature_association['oncokb']['clinical']):
+            # it's an oncokb clinical entry which mentions an exon and contains isoform information
+            # e.g., "EGFR Exon 19
+            # (which we need to determine exon mappings)
+
             isoform = feature_association['oncokb']['clinical']['Isoform']
-            feature = _enrich_ensemble(feature,
-                                       transcript_id=isoform,
-                                       exon=int(exonMatch.group(1)),
-                                       provenance_rule='is_oncokb_exon')
+            feature = _enrich_ensemble(feature, transcript_id=isoform, exon=int(exonMatch.group(1)), provenance_rule='is_oncokb_exon')
             enriched_features.append(feature)
 
         elif 'deletion' in feat_desc_lc or 'del ' in feat_desc_lc:
-            feature = _enrich_gene(feature, description_parts[0],
-                                   provenance_rule='is_deletion')
+            # FIXME: some civic variants report the representative transcript and start, end coords of the exon
+            # we should be reporting that instead of the extents of the entire gene
+            # but, of course, there are examples like EGFR Ex19 del L858R
+            feature = _enrich_gene(feature, description_parts[0], provenance_rule='is_deletion')
             enriched_features.append(feature)
 
         elif 'amplification' in feat_desc_lc or 'amp ' in feat_desc_lc:
+            # this is another gene-level event, e.g. "BRAF AMPLIFICATION"
+            # we can only report gene-level information
             feature = _enrich_gene(feature, description_parts[0], provenance_rule='is_amplification')
             enriched_features.append(feature)
 
