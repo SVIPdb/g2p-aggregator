@@ -59,19 +59,19 @@ def is_duplicate(feature_association):
     return is_dup
 
 
-def _make_silos(args):
+def _make_silos(in_args):
     """ construct silos """
-    silos = []
-    for s in args.silos:
+    instances = []
+    for s in in_args.silos:
         if s == 'elastic':
-            silos.append(ElasticSilo(args))
+            instances.append(ElasticSilo(in_args))
         if s == 'kafka':
-            silos.append(KafkaSilo(args))
+            instances.append(KafkaSilo(in_args))
         if s == 'file':
-            silos.append(FileSilo(args))
+            instances.append(FileSilo(in_args))
         if s == 'postgres':
-            silos.append(PostgresSilo(args))
-    return silos
+            instances.append(PostgresSilo(in_args))
+    return instances
 
 
 def memoized(src, harvester, genes, phases):
@@ -186,6 +186,18 @@ class DelayedOpLogger:
                 logging.info("%s delayed %ds" % (self.name, elapsed))
 
 
+def _check_dup(harvested):
+    # FIXME: _check_dup() does a lot more than just check for duplicates; it injects essential info into each entry
+    #  it should probably have its name changed to indicate that it's a more essential part of the pipeline, and
+    #  the "normalizers" should be renamed to reflect that they also add important annotations/corrections
+    for feature_association in harvested:
+        feature_association['tags'] = []
+        feature_association['dev_tags'] = []
+        normalize(feature_association)
+        if not is_duplicate(feature_association):
+            yield feature_association
+
+
 def normalize(feature_association):
     """ standard representation of drugs,disease etc. """
 
@@ -272,10 +284,19 @@ def main():
 
     logging.info("harvesters: %r" % args.harvesters)
     logging.info("silos: %r" % args.silos)
-    logging.info("elastic_search: %r" % args.elastic_search)
-    logging.info("elastic_index: %r" % args.elastic_index)
+
+    # silo-specific argument reporting (consult each silo's populate_args() method for its parameters)
+    if 'elastic' in args.silos:
+        logging.info("elastic_search: %r" % args.elastic_search)
+        logging.info("elastic_index: %r" % args.elastic_index)
+    if 'postgres' in args.silos:
+        logging.info("postgres_host: %r" % args.pg_host)
+        logging.info("postgres_user: %r" % args.pg_user)
+        logging.info("postgres_db: %r" % args.pg_db)
+    if 'file' in args.silos:
+        logging.info("file_output_dir: %r" % args.file_output_dir)
+
     logging.info("delete_index: %r" % args.delete_index)
-    logging.info("file_output_dir: %r" % args.file_output_dir)
     logging.info("phases: %r" % args.phases)
 
     silos = _make_silos(args)
@@ -289,19 +310,12 @@ def main():
         for silo in silos:
             silo.delete_all()
 
-    def _check_dup(harvested):
-        for feature_association in harvested:
-            feature_association['tags'] = []
-            feature_association['dev_tags'] = []
-            normalize(feature_association)
-            if not is_duplicate(feature_association):
-                yield feature_association
-
-    # FIXME: is it expected that only the first silo should be used if multiple ones are specified?
-    if 'all' in args.phases:
-        silos[0].save_bulk(_check_dup(harvest(args.genes)))
-    else:
-        silos[0].save_bulk(harvest_only(args.genes))
+    for silo in silos:
+        if 'all' in args.phases:
+            silo.save_bulk(_check_dup(harvest(args.genes)))
+        else:
+            # FIXME: this is really just for debugging...is this necessary
+            silo.save_bulk(harvest_only(args.genes))
 
 
 if __name__ == '__main__':
