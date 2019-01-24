@@ -77,6 +77,13 @@ def convert(gene_data):
             for evidence_item in variant['evidence_items']:
                 association = {}
 
+                # FIXME: maybe we should skip entries where the evidence item was rejected; see evidence_item['status']
+                # example of erroneous submission:
+                # https://civicdb.org/events/genes/5/summary/variants/842/summary/evidence/1941/talk/comments
+                if evidence_item['status'] == 'rejected':
+                    logging.warn("Skipping evidence item %s because it has status %s" % (evidence_item['id'], evidence_item['status']))
+                    continue
+
                 for part in variant['name'].split():
                     if '-' not in part and not part == variant['entrez_name']:
                         association['variant_name'] = part
