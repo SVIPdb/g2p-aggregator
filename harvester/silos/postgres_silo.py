@@ -9,7 +9,7 @@ import psycopg2
 from psycopg2 import sql
 
 
-VERBOSE = True
+VERBOSE = False
 
 
 def populate_args(argparser):
