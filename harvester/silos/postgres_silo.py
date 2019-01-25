@@ -28,6 +28,12 @@ def populate_args(argparser):
                            default='db')
 
 
+class CustomCompare(object):
+    def __init__(self, sql, value):
+        self.sql = sql
+        self.value = value
+
+
 def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, merge_existing=False):
     """
     Helper method for performing an idempotent insert; it always returns the key of the matched item,
@@ -54,9 +60,12 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
     # we also check if it already has the sources we'd append via append_cols; if it does, we don't need to update it
     # the complete sql looks something like:
     #  "select id, (sources ? 'civic' and ...) as no_update_needed from api_variant where keyA=valA and..."
-    # FIXME: we may actually still need to update it (e.g. if we have non-null new values for existing missing ones), so
-    #  maybe we should always do the append since it's idempotent
-    cond = sql.SQL(' and ').join(map(lambda x: sql.Identifier(x) + sql.SQL("=") + sql.Placeholder(), key_cols.keys()))
+    # note: if the key_col is actually a SQL statement (e.g., if we need to do a custom comparison), use it verbatim.
+    # otherwise formulate the comparison expression as 'colName=<placeholder>'
+    cond = sql.SQL(' and ').join(map(
+        lambda x: x[1].sql if isinstance(x[1], CustomCompare) else (sql.Identifier(x[0]) + sql.SQL("=") + sql.Placeholder()),
+        key_cols.items()  # x[0] is the column name, x[1] is the value itself
+    ))
     check_stmt = sql.SQL('select id, ({}) as no_update_needed, sources from {} where {}').format(
         sql.SQL(' and ').join(map(
             lambda k: sql.SQL("{} ? {}").format(sql.Identifier(k), sql.Literal(append_cols[k])),
@@ -70,7 +79,8 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
         logging.info(check_stmt.as_string(curs))
 
     # first check if it exists and get its id if so...
-    curs.execute(check_stmt, key_cols.values())
+    # (note that CustomCompare elements have their value embedded in the object instead of just being the value)
+    curs.execute(check_stmt, [x.value if isinstance(x, CustomCompare) else x for x in key_cols.values()])
     result = curs.fetchone()
 
     if result is not None:
@@ -324,7 +334,10 @@ class PostgresSilo:
                 curs, "api_variant", var_obj,
                 key_cols={
                     'gene_id': genes_to_ids[feat['geneSymbol']],
-                    'name': feat['name'],
+                    'name': CustomCompare(
+                        sql=sql.SQL("lower({})=lower({})").format(sql.Identifier('name'), sql.Placeholder()),
+                        value=feat['name']
+                    ),
                     # 'biomarker_type': var_obj['biomarker_type']
                     # FIXME: the above might identify differences in punctuation or case as different variants...
                     # ^ this is in fact the case, e.g. "missense_variant" (oncokb) vs. "Missense Variant" (civic)
