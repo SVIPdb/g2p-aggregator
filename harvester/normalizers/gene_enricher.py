@@ -37,7 +37,9 @@ for doc in data['response']['docs']:
         'ensembl_gene_id': doc.get('ensembl_gene_id', None),
         'entrez_id': entrez_id,
         'location': doc.get('location', None),
-        'uniprot_ids': doc.get('uniprot_ids', None)
+        'uniprot_ids': doc.get('uniprot_ids', None),
+        'aliases': [],
+        'prev_symbols': []
     }
     GENES[doc['symbol']] = [gene]
 
@@ -54,9 +56,11 @@ for doc in data['response']['docs']:
 
     for alias in doc.get('alias_symbol', []):
         ALIASES[alias].append(gene)
+        gene['aliases'].append(alias)
 
     for prev in doc.get('prev_symbol', []):
         ALIASES[prev].append(gene)
+        gene['prev_symbols'].append(prev)
 
 del data
 
@@ -67,18 +71,12 @@ def get_gene(identifier):
         genes = store.get(identifier, None)
         if genes and len(genes) == 1:
             return genes
-        else:
-            raise ValueError('gene reference does not exist or refers to multiple genes')
+
+    raise ValueError('gene reference does not exist or refers to multiple genes')
 
 
 def normalize_feature_association(feature_association):
     """ add gene_identifiers array to feature_association """
-    gene_identifiers = []
-    for gene_symbol in feature_association['genes']:
-        try:
-            gene = get_gene(gene_symbol)
-        except:
-            gene = None
-        if gene:
-            gene_identifiers.extend(gene)
-    feature_association['gene_identifiers'] = gene_identifiers
+    feature_association['gene_identifiers'] = [
+        get_gene(gene_symbol)[0] for gene_symbol in feature_association['genes']
+    ]

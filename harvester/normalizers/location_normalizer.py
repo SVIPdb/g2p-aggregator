@@ -192,7 +192,8 @@ def normalize(feature):
 
                     if var_c:
                         var_p = am[normal_reference_name].c_to_p(var_c)
-                        var_p.posedit.uncertain = False
+                        if var_p.posedit:
+                            var_p.posedit.uncertain = False
                         allele['hgvs_p'] = str(var_p)
                 except Exception as e:
                     logging.warn(
