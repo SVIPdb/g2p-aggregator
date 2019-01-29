@@ -7,7 +7,7 @@ import logging
 from tqdm import tqdm
 
 from normalizers.gene_enricher import get_gene
-from utils import str_or_none
+from utils import unicode_or_none
 
 
 def harvest(genes):
@@ -57,12 +57,12 @@ def convert(gene_data):
                 'entrez_id': variant['entrez_id'],
                 'start': variant['coordinates']['start'],
                 'end': variant['coordinates']['stop'],
-                'referenceName': str_or_none(variant['coordinates']['reference_build']),
+                'referenceName': unicode_or_none(variant['coordinates']['reference_build']),
                 'refseq': None,
-                'isoform': str_or_none(variant['coordinates']['representative_transcript']),
-                'chromosome': str_or_none(variant['coordinates']['chromosome']),
-                'ref': str_or_none(variant['coordinates']['reference_bases']),
-                'alt': str_or_none(variant['coordinates']['variant_bases']),
+                'isoform': unicode_or_none(variant['coordinates']['representative_transcript']),
+                'chromosome': unicode_or_none(variant['coordinates']['chromosome']),
+                'ref': unicode_or_none(variant['coordinates']['reference_bases']),
+                'alt': unicode_or_none(variant['coordinates']['variant_bases']),
                 'name': variant['name'],
                 'description': '{} {}'.format(variant['entrez_name'], variant['name'])
             }
@@ -131,7 +131,7 @@ def convert(gene_data):
                     variant['gene_id'], variant['id'])  # NOQA
                 association['publication_url'] = evidence_item['source']['source_url'],  # NOQA
                 if len(evidence_item['drugs']) > 0:
-                    association['drug_labels'] = ','.join([drug['name'] for drug in evidence_item['drugs']])  # NOQA
+                    association['drug_labels'] = u', '.join([drug['name'] for drug in evidence_item['drugs']])  # NOQA
 
                 # create snapshot of original data
                 v = copy.deepcopy(variant)

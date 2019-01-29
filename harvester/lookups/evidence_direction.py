@@ -27,3 +27,27 @@ def evidence_direction(evidence, association, na=False):
             association['response_type'] = evidence
 
     return association
+
+
+def evidence_direction_biological(evidence, association, na=False):
+    patho_mapping = {
+        ('oncogenic',):
+            'Pathogenic',
+        ('likely oncogenic',):
+            'Likely Pathogenic',
+        ('neutral',):
+            'Benign',
+        ('likely neutral',):
+            'Likely Benign',
+        ('inconclusive',):
+            'Uncertain Significance',
+    }
+
+    for patterns, code in patho_mapping.items():
+        if evidence.lower() in patterns:
+            association['response_type'] = code
+            break
+    else:
+        association['response_type'] = 'NA' if na else None
+
+    return association

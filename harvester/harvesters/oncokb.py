@@ -5,11 +5,13 @@ import pandas as pd
 import requests
 from urllib import quote_plus
 
+from tqdm import tqdm
+
 import cosmic_lookup_table
 
 from lookups import evidence_label as el, evidence_direction as ed
 from normalizers.gene_enricher import get_gene
-from utils import str_or_none
+from utils import unicode_or_none
 
 
 # OncoKB harvester now pulls from the below downloadable OncoKB files
@@ -53,12 +55,12 @@ def harvest(genes):
     }
     v = v.rename(columns=cols)
     v = v.fillna('')
-    for idx, row in v.iterrows():
+    for idx, row in tqdm(v.iterrows(), total=len(v.index), desc="oncokb clinical lookups"):
         r = requests.get(
             'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
         )
         for ret in r.json():
-            if str(ret['name']) == v['variant'][idx]:
+            if unicode(ret['name']) == v['variant'][idx]:
                 v.at[idx, 'variant'] = ret
 
 
@@ -77,14 +79,14 @@ def harvest(genes):
     }
     b = b.rename(columns=cols)
     b = b.fillna('')
-    for idx, row in b.iterrows():
+    for idx, row in tqdm(b.iterrows(), total=len(b.index), desc="oncokb biological lookups"):
         FLAG = False
         r = requests.get(
             'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
         )
         for ret in r.json():
             # if we find a matching variant in the api, use that instead
-            if str(ret['name']) == b['variant'][idx]:
+            if unicode(ret['name']) == b['variant'][idx]:
                 b.at[idx, 'variant'] = ret
                 FLAG = True
         if not FLAG:
@@ -119,12 +121,12 @@ def _enrich_feature(gene, alteration, feature):
         # FIXME: just using the first match for now;
         # it's not clear what to do if there are multiple matches.
         match = matches[0]
-        feature['chromosome'] = str_or_none(match['chrom'])
+        feature['chromosome'] = unicode_or_none(match['chrom'])
         feature['start'] = match['start']
         feature['end'] = match['end']
         feature['ref'] = match['ref']
         feature['alt'] = match['alt']
-        feature['referenceName'] = str_or_none(match['build'])
+        feature['referenceName'] = unicode_or_none(match['build'])
     else:
         # attempt to use the gene info to get some info, e.g. the chromosome, at least
         gene_meta = get_gene(gene)
@@ -156,11 +158,11 @@ def convert(gene_data):
                     alteration = var['alteration']
                     feature = {
                         'geneSymbol': gene,
-                        'description': '{} {}'.format(gene, var['name']),
-                        'name': var['name'],
+                        'description': u'{} {}'.format(gene, var['name']),
+                        'name': var['name'].replace(u'\u2013', '-'),
                         'entrez_id': gene_data['entrezGeneId'],
-                        'refseq': str_or_none(var['gene']['curatedRefSeq']),
-                        'isoform': str_or_none(var['gene']['curatedIsoform']),
+                        'refseq': unicode_or_none(var['gene']['curatedRefSeq']),
+                        'isoform': unicode_or_none(var['gene']['curatedIsoform']),
                         'biomarker_type': variant['consequence']['term']
                     }
                     feature = _enrich_feature(gene, alteration, feature)
@@ -168,11 +170,11 @@ def convert(gene_data):
 
         feature = {
             'geneSymbol': gene,
-            'name': variant['name'],
+            'name': variant['name'].replace(u'\u2013', '-'),
             'description': '{} {}'.format(gene, variant['name']),
             'entrez_id': gene_data['entrezGeneId'],
-            'refseq': str_or_none(variant['gene']['curatedRefSeq']),
-            'isoform': str_or_none(variant['gene']['curatedIsoform']),
+            'refseq': unicode_or_none(variant['gene']['curatedRefSeq']),
+            'isoform': unicode_or_none(variant['gene']['curatedIsoform']),
             'biomarker_type': variant['consequence']['term']
         }
         feature = _enrich_feature(gene, alteration, feature)
@@ -218,7 +220,7 @@ def convert(gene_data):
             }
         }]
         # add summary fields for Display
-        association['source_link'] = 'http://oncokb.org/#/gene/{}/variant/{}'.format(gene, quote_plus(variant['name']))
+        association['source_link'] = u'http://oncokb.org/#/gene/{}/variant/{}'.format(gene, quote_plus(variant['name']))
         association = el.evidence_label(clinical['level'], association, na=True)
         association = ed.evidence_direction(clinical['level_label'], association, na=True)
 
@@ -226,11 +228,11 @@ def convert(gene_data):
             association['publication_url'] = clinical['drugAbstracts'][0]['link']  # NOQA
         else:
             for drugPmid in clinical['drugPmids'].split(', '):
-                association['publication_url'] = 'http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(drugPmid)  # NOQA
+                association['publication_url'] = u'http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(drugPmid)  # NOQA
                 break
 
-        association['drug_labels'] = ','.join([drug for drug in clinical['drug']])   # NOQA
-        feature_names = ', '.join(['{}:{}'.format(f["geneSymbol"], f["name"]) for f in features])
+        association['drug_labels'] = u', '.join([drug for drug in clinical['drug']])   # NOQA
+        feature_names = u', '.join(['{}:{}'.format(f["geneSymbol"], f["name"]) for f in features])
 
         source_url = None
         if len(features) > 0:
@@ -256,11 +258,11 @@ def convert(gene_data):
 
         feature = {
             'geneSymbol': gene,
-            'name': variant['name'],
+            'name': variant['name'].replace(u'\u2013', '-'),
             'description': '{} {}'.format(gene.encode('utf8'), variant['name'].encode('utf8')),
             'entrez_id': gene_data['entrezGeneId'],
-            'refseq': str_or_none(variant['gene']['curatedRefSeq']),
-            'isoform': str_or_none(variant['gene']['curatedIsoform']),
+            'refseq': unicode_or_none(variant['gene']['curatedRefSeq']),
+            'isoform': unicode_or_none(variant['gene']['curatedIsoform']),
             'biomarker_type': variant['consequence']['term']
         }
 
@@ -292,6 +294,13 @@ def convert(gene_data):
         }]
 
         association['oncogenic'] = biological['oncogenic']
+        # this annotates the association's response_type field with a value from 'pathogenic' to 'uncertain',
+        # based on oncokb's "oncogenic" field, which takes on (at least) these values:
+        # "Inconclusive", "Likely Neutral", "Likely Oncogenic", "Oncogenic"
+        # FIXME: verify that this actually makes sense
+        association = ed.evidence_direction_biological(biological['oncogenic'], association, na=True)
+
+        # FIXME: figure out what the evidence_label should actually be
         association['evidence_label'] = None
 
         if len(biological['mutationEffectPmids']) > 0:
