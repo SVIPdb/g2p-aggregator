@@ -247,7 +247,7 @@ class PostgresSilo:
             logging.info("PostgresSilo: delete_source failed: {}".format(e))
 
     @staticmethod
-    def _save_one(curs, feature_assocation):
+    def _save_one(curs, feature_association):
         # caveats:
         # 1) this code should be capable of ensuring that the hierarchy can be built incrementally,
         #    e.g., we should insert a previously unseen gene first, then hook up the variant to that new instance
@@ -265,15 +265,17 @@ class PostgresSilo:
         # --------------------------------------------------------------------------------
 
         genes_to_ids = {}
-        for gene in feature_assocation['gene_identifiers']:
+        for gene in feature_association['gene_identifiers']:
             gene_id = _get_or_insert(curs, "api_gene", {
                 'entrez_id': int(gene['entrez_id']),
                 'ensembl_gene_id': gene['ensembl_gene_id'],
                 'uniprot_ids': gene['uniprot_ids'],
                 'location': gene['location'],
-                'symbol': gene['symbol']
-            }, append_cols={'sources': feature_assocation['source']})
-            genes_to_ids[gene['symbol']] = gene_id
+                'symbol': gene['symbol'],
+                'aliases': gene['aliases'],
+                'prev_symbols': gene['prev_symbols']
+            }, append_cols={'sources': feature_association['source']})
+            genes_to_ids[unicode(gene['symbol'])] = gene_id
 
             if VERBOSE:
                 print("Got gene %s w/id: %d" % (gene['symbol'], gene_id))
@@ -284,13 +286,25 @@ class PostgresSilo:
         # TODO: check if we ever actually get more than one feature per piece of evidence
         # --------------------------------------------------------------------------------
 
+        # FIXME: we need to decide how to deal with older/different genes showing up in references.
+        #  do we just link them up to the aliased gene, do we create a new entry, what...?
+        def resolve_gene_id(symbol):
+            if symbol in genes_to_ids:
+                return genes_to_ids[symbol]
+            elif len(genes_to_ids) == 1:
+                return genes_to_ids.values()[0]
+            else:
+                raise Exception("geneSymbol %s can't be found in genes_to_ids (%s)" % (symbol, ', '.join(genes_to_ids.keys())) )
+
         variants_to_ids = {}
         last_variant_id = None
-        for feat in feature_assocation['features']:
+        for feat in feature_association['features']:
+            this_gene_id = resolve_gene_id(feat['geneSymbol'])
+
             # insert a variant keyed to this gene_id
             var_obj = {
                 # these two are used as 'key cols' that we use to match variants between sources
-                'gene_id': genes_to_ids[feat['geneSymbol']],
+                'gene_id': this_gene_id,
                 'name': feat['name'],
 
                 'description': feat.get('description'),
@@ -312,7 +326,9 @@ class PostgresSilo:
                 'hgvs_p': feat.get('hgvs_p'),
 
                 'dbsnp_ids': feat.get('dbsnp_ids'),
-                'myvariant_hg19': feat.get('myvariant_hg19')
+                'myvariant_hg19': feat.get('myvariant_hg19'),
+
+                'mv_info': json.dumps(feat.get('mv_info'))  # optional info from the myvariant_enricher "normalizer"
             }
 
             if 'sequence_ontology' in feat:
@@ -333,7 +349,7 @@ class PostgresSilo:
             variant_id = _get_or_insert(
                 curs, "api_variant", var_obj,
                 key_cols={
-                    'gene_id': genes_to_ids[feat['geneSymbol']],
+                    'gene_id': this_gene_id,
                     'name': CustomCompare(
                         sql=sql.SQL("lower({})=lower({})").format(sql.Identifier('name'), sql.Placeholder()),
                         value=feat['name']
@@ -341,7 +357,7 @@ class PostgresSilo:
                     # 'biomarker_type': var_obj['biomarker_type']
                     # FIXME: the above might identify differences in punctuation or case as different variants...
                     # ^ this is in fact the case, e.g. "missense_variant" (oncokb) vs. "Missense Variant" (civic)
-                }, append_cols={'sources': feature_assocation['source']},
+                }, append_cols={'sources': feature_association['source']},
                 merge_existing=True
             )
 
@@ -356,7 +372,9 @@ class PostgresSilo:
         # results in an ID that we can use to key the evidence to the variant
         # --------------------------------------------------------------------------------
 
-        assoc = feature_assocation['association']
+        this_gene_id = resolve_gene_id(feature_association['genes'][0])
+
+        assoc = feature_association['association']
 
         curs.execute(
             """
@@ -365,9 +383,9 @@ class PostgresSilo:
             values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id
             """,
             (
-                feature_assocation['source'],
-                feature_assocation['source_url'],
-                json.dumps(feature_assocation),
+                feature_association['source'],
+                feature_association['source_url'],
+                json.dumps(feature_association),
                 assoc.get('description'),
                 assoc.get('drug_labels'),
                 assoc.get('variant_name'),
@@ -375,7 +393,7 @@ class PostgresSilo:
                 assoc.get('evidence_label'),
                 assoc.get('response_type'),
                 assoc.get('evidence_level'),
-                genes_to_ids[feature_assocation['genes'][0]],
+                this_gene_id,
                 last_variant_id
             )
         )
@@ -448,15 +466,18 @@ class PostgresSilo:
         for source, source_feats in itertools.groupby(feature_association_generator, key=operator.itemgetter('source')):
             print("=> Getting source %s..." % source)
 
-            with conn:
-                with conn.cursor() as curs:
-                    # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
-                    # we may also run harvesters in parallel, in which case we may prefer less contention between
-                    # long-running transactions
-                    for feature_association in source_feats:
-                        self._save_one(curs, feature_association)
-                            
-                conn.commit()
+            for gene, gene_feats in itertools.groupby(source_feats, key=operator.itemgetter('genes')):
+                print("=> Processing gene %s..." % gene)
+
+                with conn:
+                    with conn.cursor() as curs:
+                        # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
+                        # we may also run harvesters in parallel, in which case we may prefer less contention between
+                        # long-running transactions
+                        for feature_association in gene_feats:
+                            self._save_one(curs, feature_association)
+
+                    conn.commit()
 
     def save(self, feature_association):
         """ write dict to a series of tables"""

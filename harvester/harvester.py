@@ -13,8 +13,10 @@ import logging
 import logging.config
 import yaml
 
+from IPython.core import ultratb
+
 from normalizers import drug_normalizer, gene_enricher, disease_normalizer, reference_genome_normalizer, \
-    oncogenic_normalizer, biomarker_normalizer, location_normalizer
+    oncogenic_normalizer, biomarker_normalizer, location_normalizer, myvariant_enricher
 
 # these silos are added on line 4, but adding them again allows for code navigation
 # FIXME: the sys.path.append on line 4 should be removed in favor of a real import
@@ -39,6 +41,18 @@ requests_cache.install_cache('harvester', allowable_codes=(200, 400, 404))
 
 args = None
 silos = None
+
+
+# # drop into a shell if we raise an uncaught exception
+sys.excepthook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
+# def excepthook(etype, value, tb):
+#     traceback.print_exception(etype, value, tb)
+#     head = tb
+#     while tb.tb_next is not None and tb.tb_next is not tb:
+#         tb = tb.tb_next
+#     frame = tb.tb_frame
+#     IPython.embed(local_ns=frame.f_locals, global_ns=frame.f_globals)
+# sys.excepthook = excepthook
 
 
 def is_duplicate(feature_association):
@@ -213,7 +227,8 @@ def normalize(feature_association):
         (location_normalizer, None),
         (reference_genome_normalizer, None),
         (biomarker_normalizer, None),
-        (gene_enricher, None)
+        (gene_enricher, None),
+        (myvariant_enricher, None)
     ]
 
     for normalizer, more in normalizers:
