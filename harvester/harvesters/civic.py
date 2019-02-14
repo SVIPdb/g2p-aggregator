@@ -64,7 +64,9 @@ def convert(gene_data):
                 'ref': unicode_or_none(variant['coordinates']['reference_bases']),
                 'alt': unicode_or_none(variant['coordinates']['variant_bases']),
                 'name': variant['name'],
-                'description': '{} {}'.format(variant['entrez_name'], variant['name'])
+                'description': '{} {}'.format(variant['entrez_name'], variant['name']),
+                'source_link': 'https://civic.genome.wustl.edu/events/genes/{}/summary/variants/{}/summary'.format(
+                    variant['gene_id'], variant['id'])
             }
 
             # if our feature is lacking information we can infer from the gene metadata, fill that in
@@ -99,6 +101,8 @@ def convert(gene_data):
                         'id': drug['pubchem_id']
                     })
 
+                association['drug_interaction_type'] = evidence_item['drug_interaction_type']
+
                 association['phenotypes'] = [{
                     'description': evidence_item['disease']['name'],
                     'id': evidence_item['disease']['url']
@@ -124,9 +128,7 @@ def convert(gene_data):
                 )
                 association['response_type'] = ed.evidence_direction(evidence_item['clinical_significance'])
 
-                association[
-                    'source_link'] = 'https://civic.genome.wustl.edu/events/genes/{}/summary/variants/{}/summary'.format(
-                    variant['gene_id'], variant['id'])  # NOQA
+                association['source_link'] = feature['source_link']
                 association['publication_url'] = evidence_item['source']['source_url'],  # NOQA
                 if len(evidence_item['drugs']) > 0:
                     association['drug_labels'] = u', '.join([drug['name'] for drug in evidence_item['drugs']])  # NOQA
