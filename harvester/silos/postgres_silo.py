@@ -68,7 +68,7 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
     ))
     check_stmt = sql.SQL('select id, ({}) as no_update_needed, sources from {} where {}').format(
         sql.SQL(' and ').join(map(
-            lambda k: sql.SQL("{} ? {}").format(sql.Identifier(k), sql.Literal(append_cols[k])),
+            lambda k: sql.SQL("{} = any({})").format(sql.Literal(append_cols[k]), sql.Identifier(k)),
             append_cols.keys()
         )) if append_cols else "true", # if we have no append_cols, we never need to update
         sql.Identifier(target_table),
@@ -107,13 +107,12 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
         # and if we have append_cols that need to be updated, do so
         if (append_cols is not None and update_required) or merge_existing:
             # construct the 'append' part of the update if there are set fields that we need to append to
-            # we assume our append_cols are jsonb values that we're treating as sets, where the keys are the items in
-            #  the set and the values are 'null'.
+            # we assume our append_cols are arrays values that we're treating as sets (via array_distinct)
             # jsonb_set(a, b, 'null', TRUE) results in a's keys being merged with b's.
             append_part = (
                 map(
                     lambda x: (
-                        sql.SQL("{}=jsonb_set({}, '{}', 'null', TRUE)").format(
+                        sql.SQL("{}=array_distinct({} || '{}')").format(
                             sql.Identifier(x),
                             sql.Identifier(x),
                             sql.SQL("{") + sql.SQL(append_cols[x]) + sql.SQL("}")
@@ -124,6 +123,7 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             ) if append_cols is not None and update_required else []
 
             # construct the 'merge' part of the query if merge_existing is true
+            # FIXME: arrays should probably be extended instead of having their contents replaced
             if merge_existing:
                 merge_items = [p for p in params.items() if p[0] not in key_cols.keys()]
                 merge_part = (
@@ -164,7 +164,7 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
 
         # add in the append columns to the params since we're creating this thing now
         for col in append_cols:
-            params[col] = '{"%s":null}' % append_cols[col]
+            params[col] = '{%s}' % append_cols[col]
 
         insert_stmt = sql.SQL('insert into {} ({}) values ({}) returning id').format(
             sql.Identifier(target_table),
@@ -238,7 +238,7 @@ class PostgresSilo:
                     curs.execute("delete from api_environmentalcontext")
                     curs.execute("delete from api_evidence")
                     curs.execute("delete from api_phenotype")
-                    curs.execute("delete from api_variant where sources ? %s", (source,))
+                    curs.execute("delete from api_variant where %s = any(sources)", (source,))
                     # curs.execute("delete from api_gene where sources ? %s", (source,))
                 conn.commit()
             logging.info("...completed clearing for source {}".format(source))
@@ -376,26 +376,27 @@ class PostgresSilo:
 
         assoc = feature_association['association']
 
+        association_obj = {
+            'source': feature_association['source'],
+            'source_url': feature_association['source_url'],
+            'payload': json.dumps(feature_association),
+            'description': assoc.get('description'),
+            'drug_labels': assoc.get('drug_labels'),
+            'drug_interaction_type': assoc.get('drug_interaction_type'),
+            'variant_name': assoc.get('variant_name'),
+            'source_link': assoc.get('source_link'),
+            'evidence_label': assoc.get('evidence_label'),
+            'response_type': assoc.get('response_type'),
+            'evidence_level': assoc.get('evidence_level'),
+            'gene_id': this_gene_id,
+            'variant_id': last_variant_id
+        }
+
         curs.execute(
             """
-            insert into api_association
-            (source, source_url, payload, description, drug_labels, variant_name, source_link, evidence_label, response_type, evidence_level, gene_id, variant_id)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id
-            """,
-            (
-                feature_association['source'],
-                feature_association['source_url'],
-                json.dumps(feature_association),
-                assoc.get('description'),
-                assoc.get('drug_labels'),
-                assoc.get('variant_name'),
-                assoc.get('source_link'),
-                assoc.get('evidence_label'),
-                assoc.get('response_type'),
-                assoc.get('evidence_level'),
-                this_gene_id,
-                last_variant_id
-            )
+            insert into api_association (%s) values (%s) returning id
+            """ % (", ".join(association_obj.keys()), ", ".join(["%s"] * len(association_obj))),
+            association_obj.values()
         )
 
         # get the association object id so we can tie any phenotypes, evidence entries, and env. contexts to it
