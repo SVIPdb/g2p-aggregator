@@ -185,7 +185,7 @@ def normalize(feature):
             # to accomplish that, we'll need the reference sequence. in this case, the hgvs coordinates are more
             # stringently validated than for genomic coords (e.g., delins position coords have to match the edit length)
             normal_reference_name = normalize_referencename(feature['referenceName'])
-            if feature['refseq']:
+            if feature.get('refseq'):
                 try:
                     var_c = am[normal_reference_name].g_to_c(hgvs_rep, tx_ac=feature['refseq'])
                     allele['hgvs_c'] = str(var_c)
