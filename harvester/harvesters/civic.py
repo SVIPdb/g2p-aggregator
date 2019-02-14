@@ -122,9 +122,7 @@ def convert(gene_data):
                 association = el.evidence_label(
                     evidence_item['evidence_level'], association, na=True
                 )
-                association = ed.evidence_direction(
-                    evidence_item['clinical_significance'], association
-                )
+                association['response_type'] = ed.evidence_direction(evidence_item['clinical_significance'])
 
                 association[
                     'source_link'] = 'https://civic.genome.wustl.edu/events/genes/{}/summary/variants/{}/summary'.format(

@@ -248,7 +248,7 @@ def convert(jax_evidence):
     }]
     # add summary fields for Display
     association = el.evidence_label(evidence.approvalStatus, association)
-    association = ed.evidence_direction(evidence.responseType, association)
+    association['response_type'] = ed.evidence_direction(evidence.responseType)
 
     if len(evidence.references) > 0:
         association['publication_url'] = evidence.references[0].url

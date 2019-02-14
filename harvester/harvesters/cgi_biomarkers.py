@@ -193,7 +193,7 @@ def convert(evidence):
     # add summary fields for Display
 
     association = el.evidence_label(evidence['Evidence level'], association)
-    association = ed.evidence_direction(evidence['Association'], association)
+    association['response_type'] = ed.evidence_direction(evidence['Association'])
 
     if "oncogenic" in evidence['Biomarker']:
         association['oncogenic'] = evidence['Biomarker']

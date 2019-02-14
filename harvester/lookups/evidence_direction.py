@@ -3,33 +3,26 @@
 # 'resistant', 'sensitive', or 'no benefit'
 
 
-def evidence_direction(evidence, association, na=False):
-    resistant = ['resistant', 'resistance', 'poor outcome',
-                 'decreased response']
-    sensitive = ['sensitive', 'predictive of response']
-    nb = ['no benefit']
+# FIXME: 'evidence direction' may be a misnomer, since this value is always assigned to an association's
+#  'response_type' field
 
+def evidence_direction(evidence, na=False):
     res_type = {
-        'resistant': resistant,
-        'sensitive': sensitive,
-        'no benefit': nb
+        'resistant': ['resistant', 'resistance', 'poor outcome', 'decreased response'],
+        'sensitive': ['sensitive', 'predictive of response'],
+        'no benefit': ['no benefit']
     }
 
     for item in res_type:
         for opt in res_type[item]:
             if evidence and opt in evidence.lower():
-                association['response_type'] = item
+                return item
 
-    if 'response_type' not in association:
-        if na:
-            association['response_type'] = 'NA'
-        else:
-            association['response_type'] = evidence
-
-    return association
+    # if we reach here, it didn't match anything
+    return 'NA' if na else evidence
 
 
-def evidence_direction_biological(evidence, association, na=False):
+def evidence_direction_biological(evidence, na=False):
     patho_mapping = {
         ('oncogenic',):
             'Pathogenic',
@@ -45,9 +38,6 @@ def evidence_direction_biological(evidence, association, na=False):
 
     for patterns, code in patho_mapping.items():
         if evidence.lower() in patterns:
-            association['response_type'] = code
-            break
-    else:
-        association['response_type'] = 'NA' if na else None
+            return code
 
-    return association
+    return 'NA' if na else None

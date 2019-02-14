@@ -77,8 +77,7 @@ def convert(gene_data):
 
         association = el.evidence_label(evidence_item['evidence_label'],
                                         association, na=False)
-        association = ed.evidence_direction(evidence_item['response_type'],
-                                            association)
+        association['response_type'] = ed.evidence_direction(evidence_item['response_type'])
 
         yield {
             'genes': [gene],

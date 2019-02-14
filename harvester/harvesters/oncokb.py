@@ -135,6 +135,24 @@ def _enrich_feature(gene, alteration, feature):
     return feature
 
 
+def create_feature(variant):
+    gene_data = variant['gene']
+    gene = gene_data['hugoSymbol']
+
+    feature = {
+        'geneSymbol': gene,
+        'description': u'{} {}'.format(gene, variant['name']),
+        'name': variant['name'].replace(u'\u2013', '-'),
+        'entrez_id': gene_data['entrezGeneId'],
+        'refseq': unicode_or_none(variant['gene']['curatedRefSeq']),
+        'isoform': unicode_or_none(variant['gene']['curatedIsoform']),
+        'biomarker_type': variant['consequence']['term']
+    }
+    feature['source_link'] = u'http://oncokb.org/#/gene/{}/variant/{}'.format(feature["geneSymbol"], feature["name"])
+
+    return _enrich_feature(gene, variant['alteration'], feature)
+
+
 def convert(gene_data):
     gene = gene_data['gene']
     oncokb = {'clinical': [], 'biological': []}
@@ -145,39 +163,16 @@ def convert(gene_data):
     # this section yields a feature association for the predictive evidence
     for clinical in oncokb['clinical']:
         variant = clinical['variant']
-        alteration = variant['alteration']
-        gene_data = variant['gene']
 
         # if feature is 'Oncogenic Mutations' then merge in biological
         features = []
         if variant['name'] == 'Oncogenic Mutations':
             for biological in oncokb['biological']:
                 if biological['oncogenic'] in ['Likely Oncogenic', 'Oncogenic']:
-                    var = biological['variant']
-                    gene_data = var['gene']
-                    alteration = var['alteration']
-                    feature = {
-                        'geneSymbol': gene,
-                        'description': u'{} {}'.format(gene, var['name']),
-                        'name': var['name'].replace(u'\u2013', '-'),
-                        'entrez_id': gene_data['entrezGeneId'],
-                        'refseq': unicode_or_none(var['gene']['curatedRefSeq']),
-                        'isoform': unicode_or_none(var['gene']['curatedIsoform']),
-                        'biomarker_type': variant['consequence']['term']
-                    }
-                    feature = _enrich_feature(gene, alteration, feature)
-                    features.append(feature)
+                    features.append(create_feature(biological['variant']))
 
-        feature = {
-            'geneSymbol': gene,
-            'name': variant['name'].replace(u'\u2013', '-'),
-            'description': '{} {}'.format(gene, variant['name']),
-            'entrez_id': gene_data['entrezGeneId'],
-            'refseq': unicode_or_none(variant['gene']['curatedRefSeq']),
-            'isoform': unicode_or_none(variant['gene']['curatedIsoform']),
-            'biomarker_type': variant['consequence']['term']
-        }
-        feature = _enrich_feature(gene, alteration, feature)
+        # create the main feature for this clinical entry, too, and append it
+        feature = create_feature(variant)
         features.append(feature)
 
         association = {
@@ -219,10 +214,11 @@ def convert(gene_data):
                         for drugAbstract in clinical['drugAbstracts']]
             }
         }]
+
         # add summary fields for Display
-        association['source_link'] = u'http://oncokb.org/#/gene/{}/variant/{}'.format(gene, quote_plus(variant['name']))
+        association['source_link'] = feature['source_link']
         association = el.evidence_label(clinical['level'], association, na=True)
-        association = ed.evidence_direction(clinical['level_label'], association, na=True)
+        association['response_type'] = ed.evidence_direction(clinical['level_label'], na=True)
 
         if len(clinical['drugAbstracts']) > 0:
             association['publication_url'] = clinical['drugAbstracts'][0]['link']  # NOQA
@@ -253,70 +249,61 @@ def convert(gene_data):
     # this section yields a feature association for the oncogenic evidence
     for biological in oncokb['biological']:
         variant = biological['variant']
-        gene_data = variant['gene']
-        alteration = variant['alteration']
-
-        feature = {
-            'geneSymbol': gene,
-            'name': variant['name'].replace(u'\u2013', '-'),
-            'description': '{} {}'.format(gene.encode('utf8'), variant['name'].encode('utf8')),
-            'entrez_id': gene_data['entrezGeneId'],
-            'refseq': unicode_or_none(variant['gene']['curatedRefSeq']),
-            'isoform': unicode_or_none(variant['gene']['curatedIsoform']),
-            'biomarker_type': variant['consequence']['term']
-        }
-
-        # Look up variant and add position information.
-        feature = _enrich_feature(gene, alteration, feature)
+        feature = create_feature(variant)
 
         association = {
             'variant_name': variant['name'],
             'description': variant['consequence']['description'],
-            'environmentalContexts': []
+            'environmentalContexts': [],
+
+            'evidence': [{
+                "evidenceType": {
+                    "sourceName": "oncokb",
+                    "id": '{}-{}'.format(gene,
+                                         biological['oncogenic'])
+                },
+                'type': 'Predisposing',  # all biological records regard pathogenicity, so they're all Predisposing
+                'description': biological['mutationEffect'],
+                'info': {
+                    'publications':
+                        ['http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(Pmid)
+                            for Pmid in biological['mutationEffectPmids'].split(', ')]
+                }
+            }],
+            'oncogenic': biological['oncogenic'],
+            'source_link': feature['source_link'],
+
+            # FIXME: why do we only assign a phenotype of 'cancer' if it's oncogenic?
+            #  just made the executive decision to disable the check and make predisposing entries always about cancer;
+            #  verify if that's ok later. old code below for posterity.
+            # if biological['oncogenic'] in ['Likely Oncogenic', 'Oncogenic']:
+            #   association['phenotypes'] = [{'description': 'cancer'}]
+            'phenotypes': [{'description': 'cancer'}],
+
+            # this annotates the association's 'response_type' field with a value from 'pathogenic' to 'uncertain',
+            # based on oncokb's "oncogenic" field, which takes on (at least) these values:
+            # "Inconclusive", "Likely Neutral", "Likely Oncogenic", "Oncogenic"
+            # FIXME: verify that this actually makes sense
+            'response_type': ed.evidence_direction_biological(biological['oncogenic'], na=True),
+
+            # FIXME: figure out what the evidence_label should actually be, if anything.
+            #  (oncokb unfortunately doesn't qualify biological evidence at all from what i can tell)
+            'evidence_label': None
         }
-
-        if biological['oncogenic'] in ['Likely Oncogenic', 'Oncogenic']:
-            association['phenotypes'] = [{'description': 'cancer'}]
-
-        association['evidence'] = [{
-            "evidenceType": {
-                "sourceName": "oncokb",
-                "id": '{}-{}'.format(gene,
-                                     biological['oncogenic'])
-            },
-            'type': 'Predisposing',  # all biological records regard pathogenicity, so they're all Predisposing
-            'description': biological['mutationEffect'],
-            'info': {
-                'publications':
-                    ['http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(Pmid)
-                        for Pmid in biological['mutationEffectPmids'].split(', ')]
-            }
-        }]
-
-        association['oncogenic'] = biological['oncogenic']
-        # this annotates the association's response_type field with a value from 'pathogenic' to 'uncertain',
-        # based on oncokb's "oncogenic" field, which takes on (at least) these values:
-        # "Inconclusive", "Likely Neutral", "Likely Oncogenic", "Oncogenic"
-        # FIXME: verify that this actually makes sense
-        association = ed.evidence_direction_biological(biological['oncogenic'], association, na=True)
-
-        # FIXME: figure out what the evidence_label should actually be
-        association['evidence_label'] = None
 
         if len(biological['mutationEffectPmids']) > 0:
             for drugPmid in biological['mutationEffectPmids'].split(', '):
                 association['publication_url'] = 'http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(drugPmid)  # NOQA
                 break
 
-        feature_names = feature["geneSymbol"] + ' ' + feature["name"]
-
+        # FIXME: is there a reason that this is a duplicate of source_link, but is generated in a different way
         source_url = 'http://oncokb.org/#/gene/{}/variant/{}'.format(
             feature["geneSymbol"].encode('utf8'), feature["name"].encode('utf8'))
 
         feature_association = {
             'genes': [gene],
             'features': [feature],
-            'feature_names': feature_names,
+            'feature_names': feature["geneSymbol"] + ' ' + feature["name"],
             'association': association,
             'source': 'oncokb',
             'source_url': source_url,

@@ -69,7 +69,7 @@ def convert(interpretation):
     association['source_link'] = 'https://pmkb.weill.cornell.edu/therapies/{}'.format(interpretation['id'])
 
     association = el.evidence_label(str(interpretation['tier']), association, na=True)
-    association = ed.evidence_direction(str(interpretation['tier']), association, na=True)
+    association['response_type'] = ed.evidence_direction(str(interpretation['tier']), na=True)
 
     association['description'] = interpretation['interpretation']
     # TODO pmkb does not break out drug !?!?
