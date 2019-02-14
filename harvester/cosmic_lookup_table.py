@@ -124,12 +124,13 @@ def print_lookup_table(input_stream):
         bases = reversed([complement.get(base, base) for base in seq])
         return ''.join(bases)
 
-    print "\t".join(["gene", "hgvs_c", "hgvs_p", "build", "chrom", "start", "end", "ref", "alt", "strand"])  # NOQA
+    print "\t".join(["gene", "hgvs_c", "hgvs_p", "build", "chrom", "start", "end", "ref", "alt", "strand", "mutation_id"])  # NOQA
     for line in tqdm(input_stream):
         fields = line.split("\t")
         gene = fields[0]
         hgvs_c, hgvs_p = fields[17:19]
         build, genome_pos, strand = fields[22:25]
+        mutation_id = fields[16]
 
         parse_results = parse_hgvc_c(hgvs_c)
         ref = parse_results.get('ref', '')
@@ -142,7 +143,7 @@ def print_lookup_table(input_stream):
 
         chrom, start, end = parse_genome_pos(genome_pos)
         if bool(parse_results) and parse_results["ref"] and chrom:
-            print "\t".join([gene, hgvs_c, hgvs_p, build, chrom, start, end, ref, alt, strand])  # NOQA
+            print "\t".join([gene, hgvs_c, hgvs_p, build, chrom, start, end, ref, alt, strand, mutation_id])  # NOQA
         else:
             # TODO: Debugging.
             # print >> sys.stderr, "LINE IGNORED", hgvs_c
