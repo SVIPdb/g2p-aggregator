@@ -321,6 +321,9 @@ def normalize_feature_association(feature_association):
         return
     compounds = []
     for ctx in association['environmentalContexts']:
+        if 'type' in ctx and ctx['type'] == 'tissue':
+            # we can't normalize the drug name of a tissue type (looking at you, COSMIC)
+            continue
         ctx_drugs = normalize(ctx['description'])
         if len(ctx_drugs) > 0:
             compounds.extend(ctx_drugs)

@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')  # NOQA
 import json
-from feature_enricher import enrich
+from normalizers.feature_enricher import enrich
 from harvesters.jax_trials import _parse_profile, convert
 import cosmic_lookup_table
 from lookups import mutation_type as mut

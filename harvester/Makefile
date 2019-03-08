@@ -8,7 +8,8 @@ BENCHMARK_DATASET=oncokb
 CGI_VERSION=20170208
 
 all: oncokb_all_actionable_variants.tsv cgi_biomarkers_per_variant.tsv \
-		cosmic_lookup_table.tsv cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv \
+		cosmic_lookup_table.tsv CosmicMutantExport_sorted.tsv \
+		cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv \
 		benchmark_results.txt
 
 
@@ -30,6 +31,9 @@ cosmic_lookup_table.tsv: $(COSMIC_MUTATIONS)
 	gzcat $(COSMIC_MUTATIONS) | tail -n +2 | python cosmic_lookup_table.py create_table > temp.tsv
 	(head -n 1 temp.tsv ; tail -n +2 temp.tsv | sort | uniq) > cosmic_lookup_table.tsv
 	rm -f temp.tsv
+
+CosmicMutantExport_sorted.tsv: $(COSMIC_MUTATIONS)
+	( head -n 1 CosmicMutantExport.tsv ; tail -n +2 CosmicMutantExport.tsv | sort -t$'\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
 
 ## Create cgi_mut_benchmarking.tsv file.
 cgi_mut_benchmarking.tsv:

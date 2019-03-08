@@ -58,8 +58,7 @@ def normalize_ebi(name):
     if name in NOFINDS:
         # logging.info('{} in disease_normalizer.NOFINDS'.format(name))
         return []
-    name = urllib.quote_plus(name)
-    url = 'https://www.ebi.ac.uk/ols/api/search?q={}&groupField=iri&exact=on&start=0&ontology=doid'.format(name)  # NOQA
+    url = 'https://www.ebi.ac.uk/ols/api/search?q={}&groupField=iri&exact=on&start=0&ontology=doid'.format(urllib.quote_plus(name))  # NOQA
     # .response
     """
     {

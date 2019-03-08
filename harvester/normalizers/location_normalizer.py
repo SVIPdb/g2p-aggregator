@@ -3,7 +3,6 @@ import traceback
 import requests
 import re
 import logging
-import json
 import copy
 
 import hgvs.location
@@ -13,7 +12,7 @@ from hgvs.sequencevariant import SequenceVariant
 import hgvs.dataproviders.uta
 import hgvs.assemblymapper
 
-from feature_enricher import enrich
+from normalizers.feature_enricher import enrich
 
 from normalizers.reference_genome_normalizer import normalize as normalize_referencename
 
@@ -99,14 +98,15 @@ def genomic_hgvs(feature, complement=False, description=False):
     }
     ac = ac_map[feature['chromosome']]
 
-    start = None
-    end = None
-
-    if 'start' in feature:
+    if 'start' in feature and feature['start']:
         start = hgvs.location.SimplePosition(base=int(feature['start']))
+    else:
+        start = None
 
-    if 'end' in feature:
+    if 'end' in feature and feature['end']:
         end = hgvs.location.SimplePosition(base=int(feature['end']))
+    else:
+        end = start
 
     iv = hgvs.location.Interval(start=start, end=end)
 

@@ -1,9 +1,7 @@
-
-import json
 import sys
-import time
+
 sys.path.append('.')  # NOQA
-from feature_enricher import enrich
+from normalizers.feature_enricher import enrich
 
 
 def test_gene_enrichment():

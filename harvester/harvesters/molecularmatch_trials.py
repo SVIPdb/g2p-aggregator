@@ -72,14 +72,13 @@ def get_evidence(gene_ids=None):
                 logging.info("reached end {}".format(end))
                 start = -1
         except requests.exceptions.ConnectionError as ce:
-            logging.error(
+            logging.exception(
                 "molecularmatch ConnectionError, retrying. fetching {}"
-                .format(gene),
+                .format('CANCER'),
             )
         except Exception as e:
-            logging.error(
-                "molecularmatch error fetching {}".format(gene),
-                exc_info=1
+            logging.exception(
+                "molecularmatch error fetching {}".format('CANCER')
             )
             start = -1
 

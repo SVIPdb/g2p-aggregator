@@ -11,6 +11,7 @@ import xxhash
 import argparse
 import logging
 import logging.config
+import tqdm
 import yaml
 
 from IPython.core import ultratb
@@ -40,19 +41,31 @@ DUPLICATES = set()
 requests_cache.install_cache('harvester', allowable_codes=(200, 400, 404))
 
 args = None
-silos = None
+silos = []
+
+
+class TqdmLoggingHandler(logging.Handler):
+    def __init__(self, level=logging.NOTSET):
+        super(TqdmLoggingHandler, self).__init__(level)
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            tqdm.tqdm.write(msg)
+            self.flush()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)
+
+
+# add handler to global logger
+logger = logging.getLogger()
+logger.addHandler(TqdmLoggingHandler())
 
 
 # # drop into a shell if we raise an uncaught exception
-sys.excepthook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
-# def excepthook(etype, value, tb):
-#     traceback.print_exception(etype, value, tb)
-#     head = tb
-#     while tb.tb_next is not None and tb.tb_next is not tb:
-#         tb = tb.tb_next
-#     frame = tb.tb_frame
-#     IPython.embed(local_ns=frame.f_locals, global_ns=frame.f_globals)
-# sys.excepthook = excepthook
+# sys.excepthook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
 
 
 def is_duplicate(feature_association):
@@ -140,10 +153,11 @@ def harvest(genes):
 
         for feature_association in assoc_source:
             logging.info(
-                '{} yielded feat for gene {} w/evidence label {}'.format(
+                '{} yielded feat for gene {}, {} w/evidence level {}'.format(
                     harvester.__name__,
                     feature_association['genes'],
-                    feature_association['association']['evidence_label']
+                    feature_association['feature_names'],
+                    feature_association['association']['evidence_level']
                 )
             )
             yield feature_association
@@ -245,9 +259,9 @@ def main():
 
     argparser.add_argument('--harvesters',  nargs='+',
                            help='''harvest from these sources. default:
-                                   [cgi_biomarkers,jax,civic,oncokb,
+                                   [cgi_biomarkers,jax,civic,oncokb,cosmic,
                                    pmkb]''',
-                           default=['cgi_biomarkers', 'jax', 'civic',
+                           default=['cgi_biomarkers', 'jax', 'civic', 'cosmic',
                                     'oncokb', 'pmkb', 'brca', 'jax_trials',
                                     'molecularmatch_trials'])
 

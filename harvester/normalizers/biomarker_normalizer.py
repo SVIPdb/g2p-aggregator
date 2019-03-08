@@ -72,8 +72,7 @@ def normalize(biomarker):
         source and search through sqquence ontology
         for it """
     if biomarker in BIOONTOLOGY_NOFINDS:
-        logging.info('{} in biomarker_normalizer.BIOONTOLOGY_NOFINDS'
-                     .format(biomarker))
+        logging.info('{} in biomarker_normalizer.BIOONTOLOGY_NOFINDS'.format(biomarker))
         return None
 
     if biomarker in CACHED:
@@ -87,6 +86,13 @@ def normalize(biomarker):
     response = r.json()
     for obj in response['collection']:
         parts = obj['@id'].split('/')
+
+        # FIXME: obj['@id'] isn't always a URL; sometimes it's a URN like urn:absolute:OFSMR#Unknown, which doesn't
+        #  have two splittable parts. we should figure out what whoever wrote this was thinking, but until then let's
+        #  just skip it if it doesn't have the right number of parts after splitting.
+        if len(parts) < 2:
+            continue
+
         idx = parts[-1]
         if parts[-2] == 'obo':
             if idx.startswith('SO'):

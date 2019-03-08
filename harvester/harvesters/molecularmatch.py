@@ -90,9 +90,8 @@ def get_evidence():
                     logging.info('duplicate: {}'.format(hit['hashKey']))
 
         except Exception as e:
-            logging.error(
-                "molecularmatch error fetching {}".format('CANCER'),
-                exc_info=1
+            logging.exception(
+                "molecularmatch error fetching {}".format('CANCER')
             )
             start = -1
 

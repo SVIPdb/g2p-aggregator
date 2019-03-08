@@ -11,8 +11,7 @@ import cosmic_lookup_table
 
 from lookups import evidence_label as el, evidence_direction as ed
 from normalizers.gene_enricher import get_gene
-from utils import unicode_or_none
-
+from utils_ex.formatting import unicode_or_none
 
 # OncoKB harvester now pulls from the below downloadable OncoKB files
 # and supplements with additional variant data pulled from their public
@@ -175,10 +174,17 @@ def convert(gene_data):
         feature = create_feature(variant)
         features.append(feature)
 
+        clinical_level = clinical['level'].strip("LEVEL_")
+
         association = {
             'description': clinical['level_label'],
             'variant_name': variant['name'],
-            'environmentalContexts': []
+            'environmentalContexts': [],
+
+            'evidence_type': 'Predictive',
+            'evidence_direction': None,  # FIXME: does oncokb provide this? do we presume it supports it?
+            'clinical_significance': 'Resistance' if clinical_level.startswith("R") else 'Sensitivity/Response',
+            'evidence_level': clinical_level,
         }
         for drug in clinical['drug'].split(', '):
             association['environmentalContexts'].append({'description': drug})
@@ -215,10 +221,11 @@ def convert(gene_data):
             }
         }]
 
-        # add summary fields for Display
         association['source_link'] = feature['source_link']
+
+        # establish evidence label, level, clinical_significance here
         association = el.evidence_label(clinical['level'], association, na=True)
-        association['response_type'] = ed.evidence_direction(clinical['level_label'], na=True)
+        association['clinical_significance'] = ed.evidence_direction(clinical['level_label'], na=True)
 
         if len(clinical['drugAbstracts']) > 0:
             association['publication_url'] = clinical['drugAbstracts'][0]['link']  # NOQA
@@ -262,8 +269,6 @@ def convert(gene_data):
                     "id": '{}-{}'.format(gene,
                                          biological['oncogenic'])
                 },
-                'type': 'Predisposing',  # all biological records regard pathogenicity, so they're all Predisposing
-                'description': biological['mutationEffect'],
                 'info': {
                     'publications':
                         ['http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(Pmid)
@@ -280,15 +285,10 @@ def convert(gene_data):
             #   association['phenotypes'] = [{'description': 'cancer'}]
             'phenotypes': [{'description': 'cancer'}],
 
-            # this annotates the association's 'response_type' field with a value from 'pathogenic' to 'uncertain',
-            # based on oncokb's "oncogenic" field, which takes on (at least) these values:
-            # "Inconclusive", "Likely Neutral", "Likely Oncogenic", "Oncogenic"
-            # FIXME: verify that this actually makes sense
-            'response_type': ed.evidence_direction_biological(biological['oncogenic'], na=True),
-
-            # FIXME: figure out what the evidence_label should actually be, if anything.
-            #  (oncokb unfortunately doesn't qualify biological evidence at all from what i can tell)
-            'evidence_label': None
+            'evidence_type': 'Predisposing',  # all biological records regard pathogenicity, so they're all Predisposing
+            'evidence_direction': None,  # FIXME: does oncokb provide this? do we presume it supports it?
+            'clinical_significance': '%s, %s' % (biological['oncogenic'], biological['mutationEffect']),
+            'evidence_level': None,
         }
 
         if len(biological['mutationEffectPmids']) > 0:

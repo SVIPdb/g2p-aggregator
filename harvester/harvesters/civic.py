@@ -7,40 +7,53 @@ import logging
 from tqdm import tqdm
 
 from normalizers.gene_enricher import get_gene
-from utils import unicode_or_none
+from utils_ex.formatting import unicode_or_none
+
+# CIVIC_API_URL = "civic.genome.wustl.edu"
+CIVIC_API_URL = "civicdb.org"
 
 
 def harvest(genes):
     """ given an array of gene symbols, harvest them from civic"""
     # harvest all genes
     if not genes:
-        r = requests.get('https://civic.genome.wustl.edu/api/genes?count=99999')  # NOQA
+        r = requests.get('https://%s/api/genes?count=99999' % CIVIC_API_URL)
         for record in r.json()['records']:
             variants = record['variants']
             gene = record['name']
             variants_details = []
             for variant in tqdm(variants, desc="fetching civic variant data for %s" % gene):
-                r = requests.get('https://civic.genome.wustl.edu/api/variants/{}'.format(variant['id']))   # NOQA
+                r = requests.get('https://%s/api/variants/{}'.format(variant['id']))
                 variants_details.append(r.json())
             gene_data = {'gene': gene, 'civic': {'variants': variants_details}}
             yield gene_data
     else:
         # harvest some genes
         for gene in set(genes):
-            r = requests.get('https://civic.genome.wustl.edu/api/genes/{}?identifier_type=entrez_symbol'.format(gene))  # NOQA
+            r = requests.get('https://{}/api/genes/{}?identifier_type=entrez_symbol'.format(CIVIC_API_URL, gene))
             if r.status_code != 200 or len(r.json()['variants']) == 0:
                 # print "{} Found no variants in civic".format(gene)
-                gene_data = {'gene': gene, 'civic': {}}
+                gene_data = {'gene': gene, 'civic': {'variants': []}}
             else:
                 variants = r.json()['variants']
                 variants_details = []
                 for variant in tqdm(variants, desc="fetching civic variant data for %s" % gene):
-                    r = requests.get('https://civic.genome.wustl.edu/api/variants/{}'.format(variant['id']))   # NOQA
+                    r = requests.get('https://{}/api/variants/{}'.format(CIVIC_API_URL, variant['id']))
                     variants_details.append(r.json())
                 gene_data = {'gene': gene,
                              'civic': {'variants': variants_details}}
             yield gene_data
 
+
+def _extract_name(variant):
+    """
+
+    :param variant:
+    :return:
+    """
+    for part in variant['name'].split():
+        if '-' not in part and not part == variant['entrez_name']:
+            return part
 
 def convert(gene_data):
     """ given gene data from civic, convert it to ga4gh """
@@ -64,9 +77,7 @@ def convert(gene_data):
                 'ref': unicode_or_none(variant['coordinates']['reference_bases']),
                 'alt': unicode_or_none(variant['coordinates']['variant_bases']),
                 'name': variant['name'],
-                'description': '{} {}'.format(variant['entrez_name'], variant['name']),
-                'source_link': 'https://civic.genome.wustl.edu/events/genes/{}/summary/variants/{}/summary'.format(
-                    variant['gene_id'], variant['id'])
+                'description': '{} {}'.format(variant['entrez_name'], variant['name'])
             }
 
             # if our feature is lacking information we can infer from the gene metadata, fill that in
@@ -77,8 +88,6 @@ def convert(gene_data):
                 feature['biomarker_type'] = variant['variant_types'][0]['display_name']
 
             for evidence_item in variant['evidence_items']:
-                association = {}
-
                 # FIXME: maybe we should skip entries where the evidence item was rejected; see evidence_item['status']
                 # example of erroneous submission:
                 # https://civicdb.org/events/genes/5/summary/variants/842/summary/evidence/1941/talk/comments
@@ -86,60 +95,59 @@ def convert(gene_data):
                     logging.warn("Skipping evidence item %s because it has status %s" % (evidence_item['id'], evidence_item['status']))
                     continue
 
-                for part in variant['name'].split():
-                    if '-' not in part and not part == variant['entrez_name']:
-                        association['variant_name'] = part
-
-                association['description'] = evidence_item['description']
-                association['environmentalContexts'] = []
-                environmentalContexts = association['environmentalContexts']
-
-                for drug in evidence_item['drugs']:
-                    environmentalContexts.append({
-                        'term': drug['name'],
-                        'description': drug['name'],
-                        'id': drug['pubchem_id']
-                    })
-
-                association['drug_interaction_type'] = evidence_item['drug_interaction_type']
-
-                association['phenotypes'] = [{
-                    'description': evidence_item['disease']['name'],
-                    'id': evidence_item['disease']['url']
-                }]
-
-                association['evidence'] = [{
-                    "evidenceType": {
-                        "sourceName": "CIVIC",
-                        "id": '{}'.format(evidence_item['id'])
-                    },
-                    'type': evidence_item.get('evidence_type'),
-                    'description': evidence_item['clinical_significance'],
-                    'info': {
-                        'publications': [
-                            evidence_item['source']['source_url']
-                        ]
-                    }
-                }]
-
-                # add summary fields for Display
-                association = el.evidence_label(
-                    evidence_item['evidence_level'], association, na=True
+                evidence_url = "https://{}/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(
+                    CIVIC_API_URL,
+                    variant['gene_id'], variant['id'], evidence_item['id']
                 )
-                association['response_type'] = ed.evidence_direction(evidence_item['clinical_significance'])
 
-                association['source_link'] = feature['source_link']
-                association['publication_url'] = evidence_item['source']['source_url'],  # NOQA
-                if len(evidence_item['drugs']) > 0:
-                    association['drug_labels'] = u', '.join([drug['name'] for drug in evidence_item['drugs']])  # NOQA
+                association = {
+                    'variant_name': _extract_name(variant),
+                    'description': evidence_item['description'],
+                    'environmentalContexts': [
+                        {
+                            'term': drug['name'],
+                            'description': drug['name'],
+                            'id': drug['pubchem_id']
+                        }
+                        for drug in evidence_item['drugs']
+                    ],
+                    'drug_interaction_type': evidence_item['drug_interaction_type'],
+                    'phenotypes': [{
+                        'description': evidence_item['disease']['name'],
+                        'id': evidence_item['disease']['url']
+                    }],
+                    'evidence': [{
+                        "evidenceType": {
+                            "sourceName": "CIVIC",
+                            "id": '{}'.format(evidence_item['id'])
+                        },
+                        'info': {
+                            'publications': [
+                                evidence_item['source']['source_url']
+                            ]
+                        }
+                    }],
+
+                    'evidence_type': evidence_item['evidence_type'],
+                    'evidence_direction': evidence_item['evidence_direction'],
+                    'clinical_significance': evidence_item['clinical_significance'],
+                    'evidence_level': evidence_item['evidence_level'],
+
+                    'source_link': evidence_url,
+                    'publication_url': (evidence_item['source']['source_url'],),
+
+                    'drug_labels': u', '.join([drug['name'] for drug in evidence_item['drugs']]) if len(evidence_item['drugs']) > 0 else None
+                }
 
                 # create snapshot of original data
                 v = copy.deepcopy(variant)
                 del v['evidence_items']
                 v['evidence_items'] = [evidence_item]
 
-                source_url = "https://civicdb.org/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(
-                    variant['gene_id'], variant['id'], evidence_item['id'])  # NOQA
+                variant_url = 'https://{}/events/genes/{}/summary/variants/{}/summary'.format(
+                    CIVIC_API_URL,
+                    variant['gene_id'], variant['id']
+                )
 
                 feat_assoc = {
                     'genes': [gene_data['gene']],
@@ -147,14 +155,14 @@ def convert(gene_data):
                     'feature_names': evidence_item['name'],
                     'association': association,
                     'source': 'civic',
-                    'source_url': source_url,
+                    'source_url': variant_url,
                     'civic': v
                 }
 
                 yield feat_assoc
 
     except Exception as e:
-        logging.error(gene_data['gene'], exc_info=1, ex=e)
+        logging.exception(gene_data['gene'])
 
 
 def harvest_and_convert(genes):

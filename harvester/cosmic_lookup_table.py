@@ -72,8 +72,8 @@ def parse_hgvc_c(hgvs_c):
     """
 
     # FIXME: there's one pathological entry in CosmicMutantExport.tsv as of 28-11-2018:
-    # NOTCH1	[...]	COSM36049	c.	p.E2516Xfs*?	[...]
-    # note the hgvs string is just 'c.'. i'm just skipping it for now, but it should be revisited
+    #  NOTCH1	[...]	COSM36049	c.	p.E2516Xfs*?	[...]
+    #  note the hgvs string is just 'c.'. i'm just skipping it for now, but it should be revisited
 
     if not hgvs_c.startswith("c.") or "?" in hgvs_c or hgvs_c == "c.":
         return {}

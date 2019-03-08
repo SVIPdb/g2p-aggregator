@@ -68,7 +68,7 @@ def convert(gene_data):
         }]
         # add summary fields for Display
         association['oncogenic'] = brca['Clinical_Significance_ClinVar'].split(',')[0]
-        association['evidence_label'] = 'D'
+        association['evidence_level'] = 'D'
         feature_association = {'genes': [brca['Gene_Symbol']],
                                'features': [feature],
                                'feature_names': feature['name'],
@@ -79,7 +79,7 @@ def convert(gene_data):
         yield feature_association
 
     except Exception as e:
-        logging.error(gene_data['gene'], exc_info=1)
+        logging.exception(gene_data['gene'])
 
 
 def harvest_and_convert(genes):

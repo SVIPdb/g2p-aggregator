@@ -92,7 +92,7 @@ def convert(gene_data):
                 # yield feat_assoc
 
     except Exception as e:
-        logging.error(gene_data['gene'], exc_info=1, ex=e)
+        logging.exception(gene_data['gene'])
 
 
 def harvest_and_convert(genes):

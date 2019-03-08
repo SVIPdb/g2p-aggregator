@@ -66,11 +66,11 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
         lambda x: x[1].sql if isinstance(x[1], CustomCompare) else (sql.Identifier(x[0]) + sql.SQL("=") + sql.Placeholder()),
         key_cols.items()  # x[0] is the column name, x[1] is the value itself
     ))
-    check_stmt = sql.SQL('select id, ({}) as no_update_needed, sources from {} where {}').format(
+    check_stmt = sql.SQL('select id, ({}) as no_update_needed from {} where {}').format(
         sql.SQL(' and ').join(map(
             lambda k: sql.SQL("{} = any({})").format(sql.Literal(append_cols[k]), sql.Identifier(k)),
             append_cols.keys()
-        )) if append_cols else "true", # if we have no append_cols, we never need to update
+        )) if append_cols else sql.Literal(True),  # if we have no append_cols, we never need to update
         sql.Identifier(target_table),
         cond
     )
@@ -88,14 +88,6 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
         #  the same source will have the same info for genes/variants across evidence items.
         #  that would require a bit of coupling to the table spec, specifically checking the sources
         #  before flagging for a merge
-
-        if append_cols:
-            new_source = append_cols['sources']
-            existing_sources = result[2]
-
-            if merge_existing and 'name' in params:
-                logging.info("*** Merging existing variant %s (%s) with new data from %s" %
-                             (params['name'], existing_sources, new_source))
 
         # it does exist, so retrieve its identifying info
         if VERBOSE:
@@ -163,8 +155,9 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
         # ...it doesn't exist, so insert it and get its resulting id
 
         # add in the append columns to the params since we're creating this thing now
-        for col in append_cols:
-            params[col] = '{%s}' % append_cols[col]
+        if append_cols:
+            for col in append_cols:
+                params[col] = '{%s}' % append_cols[col]
 
         insert_stmt = sql.SQL('insert into {} ({}) values ({}) returning id').format(
             sql.Identifier(target_table),
@@ -195,6 +188,9 @@ class PostgresSilo:
         self._pg_user = args.pg_user
         self._pg_password = args.pg_password
 
+        # caches source name to id, populated in save_bulk()
+        self.source_to_id = {}
+
     def __str__(self):
         return "PostgresSilo host:{} db:{}".format(self._pg_host, self._pg_db)
 
@@ -215,6 +211,7 @@ class PostgresSilo:
                     curs.execute("delete from api_evidence")
                     curs.execute("delete from api_phenotype")
                     curs.execute("delete from api_association")
+                    curs.execute("delete from api_variantinsource")
                     curs.execute("delete from api_variant")
                     curs.execute("delete from api_gene")
                     curs.execute("alter sequence api_environmentalcontext_id_seq restart with 1")
@@ -235,6 +232,7 @@ class PostgresSilo:
 
             with self._connect() as conn:
                 with conn.cursor() as curs:
+                    # FIXME: we *really* need to implement db-level cascading deletes, this is broken
                     curs.execute("delete from api_environmentalcontext")
                     curs.execute("delete from api_evidence")
                     curs.execute("delete from api_phenotype")
@@ -246,8 +244,7 @@ class PostgresSilo:
         except Exception as e:
             logging.info("PostgresSilo: delete_source failed: {}".format(e))
 
-    @staticmethod
-    def _save_one(curs, feature_association):
+    def _save_one(self, curs, feature_association):
         # caveats:
         # 1) this code should be capable of ensuring that the hierarchy can be built incrementally,
         #    e.g., we should insert a previously unseen gene first, then hook up the variant to that new instance
@@ -373,23 +370,40 @@ class PostgresSilo:
         # --------------------------------------------------------------------------------
 
         this_gene_id = resolve_gene_id(feature_association['genes'][0])
+        source_id = self.source_to_id[feature_association['source']]
 
         assoc = feature_association['association']
 
+        # --- stage 3a. look up a variant-to-source mapping, if it exists, or create it if it doesn't
+        variant_in_source_id = _get_or_insert(
+            curs, "api_variantinsource", {
+                'source_id': source_id,
+                'variant_id': last_variant_id,
+                'variant_url': assoc.get('source_link'),  # FIXME: this should be the variant's URL in that source
+                'extras': assoc.get('extras')
+            },
+            key_cols={
+                'source_id': source_id,
+                'variant_id': last_variant_id
+            },
+            merge_existing=True
+        )
+
         association_obj = {
             'source': feature_association['source'],
-            'source_url': feature_association['source_url'],
+            'source_url': feature_association['source_url'],  # FIXME: this should be the specific evidence item's URL
             'payload': json.dumps(feature_association),
             'description': assoc.get('description'),
             'drug_labels': assoc.get('drug_labels'),
             'drug_interaction_type': assoc.get('drug_interaction_type'),
             'variant_name': assoc.get('variant_name'),
-            'source_link': assoc.get('source_link'),
-            'evidence_label': assoc.get('evidence_label'),
-            'response_type': assoc.get('response_type'),
+            'source_link': assoc.get('source_link'),  # FIXME: this should be the variant's URL in that source
+            'variant_in_source_id': variant_in_source_id,
+
+            'evidence_type': assoc.get('evidence_type'),
+            'evidence_direction': assoc.get('evidence_direction'),
+            'clinical_significance': assoc.get('clinical_significance'),
             'evidence_level': assoc.get('evidence_level'),
-            'gene_id': this_gene_id,
-            'variant_id': last_variant_id
         }
 
         curs.execute(
@@ -425,20 +439,18 @@ class PostgresSilo:
 
         if 'evidence' in assoc:
             for evidence in assoc['evidence']:
+                evidence_obj = {
+                    'publications': evidence['info'].get('publications') if 'info' in evidence else None,
+                    'evidenceType_sourceName': evidence['evidenceType'].get('sourceName') if 'evidenceType' in evidence else None,
+                    'evidenceType_id': evidence['evidenceType'].get('id') if 'evidenceType' in evidence else None,
+                    'association_id': assoc_id
+                }
+
                 curs.execute(
                     """
-                    insert into api_evidence
-                    (type, description, publications, "evidenceType_sourceName", "evidenceType_id", association_id)
-                    values (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        evidence.get('type', 'unknown'),  # one of predictive, diagnostic, prognostic, or predisposing; we need to determine this from the payload somehow
-                        evidence.get('description'),
-                        evidence['info'].get('publications') if 'info' in evidence else None,
-                        evidence['evidenceType'].get('sourceName') if 'evidenceType' in evidence else None,
-                        evidence['evidenceType'].get('id') if 'evidenceType' in evidence else None,
-                        assoc_id
-                    )
+                    insert into api_evidence (%s) values (%s)
+                    """ % (", ".join('"%s"' % k for k in evidence_obj.keys()), ", ".join(["%s"] * len(evidence_obj))),
+                    evidence_obj.values()
                 )
 
         if 'environmentalContexts' in assoc:
@@ -462,6 +474,10 @@ class PostgresSilo:
         """ write many feature_associations to the db """
 
         conn = self._connect()
+
+        with conn.cursor() as curs:
+            curs.execute("select * from api_source")
+            self.source_to_id = dict((x[1], x[0]) for x in curs.fetchall())
 
         # split transactions by source (for now)
         for source, source_feats in itertools.groupby(feature_association_generator, key=operator.itemgetter('source')):
