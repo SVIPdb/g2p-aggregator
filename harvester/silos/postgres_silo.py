@@ -379,7 +379,7 @@ class PostgresSilo:
             curs, "api_variantinsource", {
                 'source_id': source_id,
                 'variant_id': last_variant_id,
-                'variant_url': assoc.get('source_link'),  # FIXME: this should be the variant's URL in that source
+                'variant_url': feature_association.get('source_url'),
                 'extras': assoc.get('extras')
             },
             key_cols={
@@ -391,13 +391,12 @@ class PostgresSilo:
 
         association_obj = {
             'source': feature_association['source'],
-            'source_url': feature_association['source_url'],  # FIXME: this should be the specific evidence item's URL
             'payload': json.dumps(feature_association),
             'description': assoc.get('description'),
             'drug_labels': assoc.get('drug_labels'),
             'drug_interaction_type': assoc.get('drug_interaction_type'),
             'variant_name': assoc.get('variant_name'),
-            'source_link': assoc.get('source_link'),  # FIXME: this should be the variant's URL in that source
+            'source_link': assoc.get('source_link'),  # this is the actual sample ID
             'variant_in_source_id': variant_in_source_id,
 
             'evidence_type': assoc.get('evidence_type'),
