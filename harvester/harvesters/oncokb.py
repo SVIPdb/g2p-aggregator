@@ -224,8 +224,9 @@ def convert(gene_data):
         association['source_link'] = feature['source_link']
 
         # establish evidence label, level, clinical_significance here
-        association = el.evidence_label(clinical['level'], association, na=True)
-        association['clinical_significance'] = ed.evidence_direction(clinical['level_label'], na=True)
+        # FIXME: we disabled these because they're borked, but is that the right choice?
+        # association = el.evidence_label(clinical['level'], association, na=True)
+        # association['clinical_significance'] = ed.evidence_direction(clinical['level_label'], na=True)
 
         if len(clinical['drugAbstracts']) > 0:
             association['publication_url'] = clinical['drugAbstracts'][0]['link']  # NOQA
@@ -234,7 +235,7 @@ def convert(gene_data):
                 association['publication_url'] = u'http://www.ncbi.nlm.nih.gov/pubmed/{}'.format(drugPmid)  # NOQA
                 break
 
-        association['drug_labels'] = u', '.join([drug for drug in clinical['drug']])   # NOQA
+        association['drug_labels'] = clinical['drug']  # NOQA
         feature_names = u', '.join(['{}:{}'.format(f["geneSymbol"], f["name"]) for f in features])
 
         source_url = None
