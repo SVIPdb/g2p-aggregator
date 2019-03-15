@@ -231,8 +231,8 @@ def normalize(feature_association):
 
     # stores a list of normalizers to apply and optionally what to report on the console if they take >1sec to run
     normalizers = [
-        (drug_normalizer, lambda logger:
-            feature_association['association'].get('environmentalContexts', None)),
+        # (drug_normalizer, lambda logger:
+        #     feature_association['association'].get('environmentalContexts', None)),
         (disease_normalizer, lambda logger:
             feature_association['association']['phenotypes'][0]['description']
             if 'phenotypes' in feature_association['association']
