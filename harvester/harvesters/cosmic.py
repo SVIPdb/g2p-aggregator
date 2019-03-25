@@ -42,17 +42,22 @@ def harvest(genes=None):
         if genes is not None:
             it = itertools.ifilter(lambda x: x[0] in genes, it)
 
-        for gene_symbol, variants in it:
-            variant = variants.next()  # peek at the first variant in the list...
-            full_variants = itertools.chain([variant], variants)  # ...but put it back when we iterate later
+        for gene_symbol, samples in it:
+            sample = samples.next()  # peek at the first sample in the list...
+
+            if not sample:
+                # no idea how this would happen, but if there aren't any samples for this gene, skip the gene
+                continue
+
+            full_samples = itertools.chain([sample], samples)  # ...but put it back when we iterate later
 
             # all genes have the same accession number, so we can do it on the gene level here
-            refseq_ac = ensembl_txac_to_refseq(variant['Accession Number'])
+            refseq_ac = ensembl_txac_to_refseq(sample['Accession Number'])
 
             yield {
                 'gene_symbol': gene_symbol,
                 'refseq_ac': refseq_ac,
-                'variants': full_variants
+                'samples': full_samples
             }
 
 
@@ -60,126 +65,107 @@ def harvest(genes=None):
 def convert(gene_data, tq):
     # try:
 
-    for variant_aa, samples in itertools.groupby(gene_data['variants'], operator.itemgetter('Mutation AA')):
-        # we know all samples for the same variant share these fields, so we'll just grab the first one
-        # (we later have to put it back on the generator, which is accomplished via chain() later on)
-        variant = samples.next()
-        mapped_cds = variant['Mutation CDS']
+    # NOTE: we used to grab the first variant in the Mutation AA group, but later noticed that not every
+    # sample under a 'Mutation AA' entry had the same fields for, say, "Mutation CDS" (which in retrospect
+    # makes perfect sense.) anyway, we went back to processing each sample individually instead of trying to
+    # group them under the same AA change, which is incidentally faster due to not having to sort the samples anymore.
 
-        if not variant:
-            raise Exception("No variants found for AA %s!" % variant_aa)
+    for sample in gene_data['samples']:
+        mapped_cds = sample['Mutation CDS']
 
         if '?' in mapped_cds:
             # afaik, we can't parse variants that have a question mark in their cDNA representation
-            logging.warn("Skipping COSMIC variant %s (AA: %s) b/c of missing cDNA rep: %s" % (
-                variant['Mutation ID'], variant_aa, mapped_cds))
-            tq.update(len(list(samples)) + 1)
+            # logging.warn("Skipping COSMIC variant %s (AA: %s) b/c of missing cDNA rep: %s" % (
+            #     sample['Mutation ID'], sample['Mutation AA'], mapped_cds))
+            tq.update()  # move the counter ahead anyway
             continue
 
         # the following is shared by all samples under this variant, although we emit an evidence item
         # for each sample
-        match = coord_matcher.match(variant['Mutation genome position'])
+        match = coord_matcher.match(sample['Mutation genome position'])
         coords = match.groupdict() if match else {}
 
-        # # for some reason the incorrect notation for a delins that specifies the source rep is common in COSMIC
-        # # (e.g., c.1798_1799GT>AA, which should instead be c.1798_1799GTdelinsAA)
-        # # FIXME: should we be attempting to map these to their appropriate hgvs rep, as below, or should we ignore them?
-        # bad_delins_match = re.match(r'c.(?P<range>[0-9]+_[0-9]+)[A-Z]+>(?P<alt>[A-Z]+)', mapped_cds)
-        # if bad_delins_match:
-        #     mapped_cds = 'c.%(range)sdelins%(alt)s' % bad_delins_match.groupdict()
-        # in order to produce ref, alt, we'll need to parse the HGVS cDNA field
-        # seqvar = None
-        # try:
-        #     seqvar = hgvsparser.parse_c_variant("%s:%s" % (gene_data['refseq_ac'], mapped_cds))
-        # except:
-        #     logging.exception("Couldn't parse hgvs cDNA string, skipping")
-        #     tq.update(len(list(samples)) + 1)
-        #     continue
-
-        # this is way faster and gets us basically the same thing as using the hgvs library, since we don't even have
-        # the right accession anyway...
-        pos_info = parse_hgvc_c(variant['Mutation CDS'])
+        # this is way faster and gets us basically the same thing as using the hgvs library, since we don't even
+        # have the right accession anyway...
+        pos_info = parse_hgvc_c(sample['Mutation CDS'])
 
         feature = {
             'geneSymbol': gene_data['gene_symbol'],
-            'entrez_id': variant['HGNC ID'],
+            'entrez_id': sample['HGNC ID'],
             'start': coords.get('start'),
             'end': coords.get('stop'),
-            'referenceName': variant['GRCh'],
+            'referenceName': sample['GRCh'],
             'refseq': gene_data['refseq_ac'],
-            'isoform': variant['Accession Number'],
+            'isoform': sample['Accession Number'],
             'chromosome': coords.get('chrom'),
             'ref': pos_info['ref'] if pos_info else None,
             'alt': pos_info['alt'] if pos_info else None,
-            'name': variant['Mutation AA'][2:],
-            'description': "%s %s" % (gene_data['gene_symbol'], variant['Mutation AA'][2:]),
-            'biomarker_type': variant['Mutation Description']
+            'name': sample['Mutation AA'][2:],
+            'description': "%s %s" % (gene_data['gene_symbol'], sample['Mutation AA'][2:]),
+            'biomarker_type': sample['Mutation Description']
         }
 
-        for sample in itertools.chain([variant], samples):
-            # TODO: figure out the evidence label and level for all cosmic variants
+        association = {
+            'variant_name': feature['name'],
+            'description': 'n/a',  # FIXME: what's a good description for this?
 
-            association = {
-                'variant_name': feature['name'],
-                'description': 'n/a',  # FIXME: what's a good description for this?
+            'extras': json.dumps({
+                'fathmm_prediction': sample['FATHMM prediction'],
+                'fathmm_score': sample['FATHMM score'],
+            }),
 
-                'extras': json.dumps({
-                    'fathmm_prediction': variant['FATHMM prediction'],
-                    'fathmm_score': variant['FATHMM score'],
-                }),
+            # for COSMIC, the tissue in which the sample was found
+            'environmentalContexts': [{
+                'description': sample["Primary site"],
+                'type': 'tissue'
+            }],
 
-                # for COSMIC, the tissue in which the sample was found
-                'environmentalContexts': [{
-                    'description': sample["Primary site"],
-                    'type': 'tissue'
-                }],
+            'evidence': [{
+                "evidenceType": {
+                    "sourceName": "cosmic",
+                    "id": sample['ID_sample']
+                },
+                # all biological records regard pathogenicity, so they're all Predisposing
+                'type': 'Predisposing',
+                'description': "%s (%s)" % (
+                    capitalize_words(sample['FATHMM prediction']),
+                    sample['FATHMM score']
+                ),
+                'info': {
+                    'publications': ['http://www.ncbi.nlm.nih.gov/pubmed/%s' % sample['Pubmed_PMID']]
+                }
+            }],
 
-                'evidence': [{
-                    "evidenceType": {
-                        "sourceName": "cosmic",
-                        "id": sample['ID_sample']
-                    },
-                    # all biological records regard pathogenicity, so they're all Predisposing
-                    'type': 'Predisposing',
-                    'description': "%s (%s)" % (
-                        capitalize_words(sample['FATHMM prediction']),
-                        sample['FATHMM score']
-                    ),
-                    'info': {
-                        'publications': ['http://www.ncbi.nlm.nih.gov/pubmed/%s' % sample['Pubmed_PMID']]
-                    }
-                }],
+            'source_link': 'https://cancer.sanger.ac.uk/cosmic/sample/overview?id=%s' % sample['ID_sample'],
 
-                'source_link': 'https://cancer.sanger.ac.uk/cosmic/sample/overview?id=%s' % sample['ID_sample'],
+            'phenotypes': [{
+                'description': sample['Primary histology'].replace("_", " ").replace("neoplasm", "cancer")
+            }],
 
-                'phenotypes': [{
-                    'description': sample['Primary histology'].replace("_", " ").replace("neoplasm", "cancer")
-                }],
+            # FIXME: figure out what these should be for COSMIC
+            'evidence_type': None,
+            'evidence_direction': None,
+            'clinical_significance': None,
+            'evidence_level': None,
+        }
 
-                # FIXME: figure out what these should be for COSMIC
-                'evidence_type': None,
-                'evidence_direction': None,
-                'clinical_significance': None,
-                'evidence_level': None,
-            }
+        # FIXME: this should really be named 'variant URL' or somesuch
+        # remove the COSM prefix on the entry's ID when constructing the URL
+        source_url = 'https://cancer.sanger.ac.uk/cosmic/mutation/overview?id=%s' % sample['Mutation ID'][4:],
 
-            # FIXME: this should really be named 'variant URL' or somesuch
-            # remove the COSM prefix on the entry's ID when constructing the URL
-            source_url = 'https://cancer.sanger.ac.uk/cosmic/mutation/overview?id=%s' % variant['Mutation ID'][4:],
+        feat_assoc = {
+            'genes': [gene_data['gene_symbol']],  # there's only ever one gene/variant
+            'features': [feature],
+            'feature_names': feature["geneSymbol"] + ' ' + feature["name"],
+            'association': association,
+            'source': 'cosmic',
+            'source_url': source_url,
+            'cosmic': sample
+        }
 
-            feat_assoc = {
-                'genes': [gene_data['gene_symbol']],  # there's only ever one gene/variant
-                'features': [feature],
-                'feature_names': feature["geneSymbol"] + ' ' + feature["name"],
-                'association': association,
-                'source': 'cosmic',
-                'source_url': source_url,
-                'cosmic': sample
-            }
+        tq.update()
 
-            tq.update()
-
-            yield feat_assoc
+        yield feat_assoc
 
     # except Exception as e:
     #     raise e
