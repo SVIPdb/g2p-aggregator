@@ -34,6 +34,10 @@ import requests_cache
 import timeit
 import hashlib
 
+
+# announce each item that's added
+VERBOSE_ITEMS = False
+
 # we just need to check for membership, so a set is faster than a list
 DUPLICATES = set()
 
@@ -152,14 +156,15 @@ def harvest(genes):
             assoc_source = harvester.harvest_and_convert(genes)
 
         for feature_association in assoc_source:
-            logging.info(
-                '{} yielded feat for gene {}, {} w/evidence level {}'.format(
-                    harvester.__name__,
-                    feature_association['genes'],
-                    feature_association['feature_names'],
-                    feature_association['association']['evidence_level']
+            if VERBOSE_ITEMS:
+                logging.info(
+                    '{} yielded feat for gene {}, {} w/evidence level {}'.format(
+                        harvester.__name__,
+                        feature_association['genes'],
+                        feature_association['feature_names'],
+                        feature_association['association']['evidence_level']
+                    )
                 )
-            )
             yield feature_association
 
 
