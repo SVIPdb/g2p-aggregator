@@ -71,9 +71,11 @@ def convert(gene_data, tq):
     # group them under the same AA change, which is incidentally faster due to not having to sort the samples anymore.
 
     for sample in gene_data['samples']:
-        mapped_cds = sample['Mutation CDS']
-
-        if '?' in mapped_cds:
+        if (
+            not sample['Mutation AA'] or not sample['Mutation CDS']
+            or '?' in sample['Mutation AA'] or '?' in sample['Mutation CDS']
+            # or '_' in sample['Mutation CDS']
+        ):
             # afaik, we can't parse variants that have a question mark in their cDNA representation
             # logging.warn("Skipping COSMIC variant %s (AA: %s) b/c of missing cDNA rep: %s" % (
             #     sample['Mutation ID'], sample['Mutation AA'], mapped_cds))
