@@ -3,6 +3,8 @@ import os
 import sys
 import importlib, pkgutil
 
+from utils_ex.tqdm_logger import TqdmLoggingHandler
+
 sys.path.append('silos')  # NOQA
 sys.path.append('harvesters')  # NOQA
 
@@ -11,13 +13,11 @@ import xxhash
 import argparse
 import logging
 import logging.config
-import tqdm
 import yaml
 
-from IPython.core import ultratb
-
-from normalizers import drug_normalizer, gene_enricher, disease_normalizer, reference_genome_normalizer, \
-    oncogenic_normalizer, biomarker_normalizer, location_normalizer, myvariant_enricher
+from utils_ex.instrumentation import DelayedOpLogger, show_runtime_stats
+from normalizers import gene_enricher, disease_normalizer, oncogenic_normalizer, reference_genome_normalizer, \
+    biomarker_normalizer, location_normalizer, myvariant_enricher
 
 # these silos are added on line 4, but adding them again allows for code navigation
 # FIXME: the sys.path.append on line 4 should be removed in favor of a real import
@@ -31,7 +31,6 @@ from silos.postgres_silo import PostgresSilo
 import silos.postgres_silo as postgres_silo
 
 import requests_cache
-import timeit
 import hashlib
 
 
@@ -47,26 +46,9 @@ requests_cache.install_cache('harvester', allowable_codes=(200, 400, 404))
 args = None
 silos = []
 
-
-class TqdmLoggingHandler(logging.Handler):
-    def __init__(self, level=logging.NOTSET):
-        super(TqdmLoggingHandler, self).__init__(level)
-
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-            tqdm.tqdm.write(msg)
-            self.flush()
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except:
-            self.handleError(record)
-
-
 # add handler to global logger
 logger = logging.getLogger()
 logger.addHandler(TqdmLoggingHandler())
-
 
 # # drop into a shell if we raise an uncaught exception
 # sys.excepthook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
@@ -189,36 +171,6 @@ def harvest_only(genes):
             yield {'source': h, h: evidence}
 
 
-class DelayedOpLogger:
-    """
-    Emits a log statement if the contained code takes longer than 'duration' seconds.
-    """
-    def __init__(self, name, duration=1):
-        self.duration = duration
-        self.more = None
-        self.name = name
-
-    def __enter__(self):
-        self.start_time = timeit.default_timer()
-        return self
-
-    def logdelayed(self, *more):
-        """
-        Customizes the log statement with extra information.
-        :param more: values to append to the log statement
-        """
-        self.more = more
-
-    def __exit__(self, *exc_args):
-        elapsed = timeit.default_timer() - self.start_time
-
-        if elapsed > self.duration:
-            if self.more:
-                logging.info("%s delayed %ds; %s" % (self.name, elapsed, " ".join(str(x) for x in self.more)))
-            else:
-                logging.info("%s delayed %ds" % (self.name, elapsed))
-
-
 def _check_dup(harvested):
     # FIXME: _check_dup() does a lot more than just check for duplicates; it injects essential info into each entry
     #  it should probably have its name changed to indicate that it's a more essential part of the pipeline, and
@@ -236,9 +188,12 @@ def normalize(feature_association):
 
     # stores a list of normalizers to apply and optionally what to report on the console if they take >1sec to run
     normalizers = [
-        # (drug_normalizer, lambda logger:
+        # FIXME: this normalizer removes drug combination info and destroys the capitalization returned by each source.
+        #  it's currently disabled, but it should eventually be fixed.
+        # (drug_normalizer, lambda dol:
         #     feature_association['association'].get('environmentalContexts', None)),
-        (disease_normalizer, lambda logger:
+
+        (disease_normalizer, lambda dol:
             feature_association['association']['phenotypes'][0]['description']
             if 'phenotypes' in feature_association['association']
                and len(feature_association['association']['phenotypes']) > 0 else None),
@@ -350,6 +305,9 @@ def main():
         else:
             # FIXME: this is really just for debugging...is this necessary
             silo.save_bulk(harvest_only(args.genes))
+
+    # afterward, print some statistics on how long the normalizers are taking
+    show_runtime_stats()
 
 
 if __name__ == '__main__':
