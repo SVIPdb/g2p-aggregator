@@ -212,18 +212,22 @@ class PostgresSilo:
                     curs.execute("delete from api_phenotype")
                     curs.execute("delete from api_association")
                     curs.execute("delete from api_variantinsource")
+                    curs.execute("delete from api_svipvariant")
                     curs.execute("delete from api_variant")
                     curs.execute("delete from api_gene")
                     curs.execute("alter sequence api_environmentalcontext_id_seq restart with 1")
                     curs.execute("alter sequence api_evidence_id_seq restart with 1")
                     curs.execute("alter sequence api_phenotype_id_seq restart with 1")
                     curs.execute("alter sequence api_association_id_seq restart with 1")
+                    curs.execute("alter sequence api_variantinsource_id_seq restart with 1")
+                    curs.execute("alter sequence api_svipvariant_id_seq restart with 1")
                     curs.execute("alter sequence api_variant_id_seq restart with 1")
                     curs.execute("alter sequence api_gene_id_seq restart with 1")
                 conn.commit()
 
         except Exception as e:
             logging.info("PostgresSilo: delete_all failed: {}".format(e))
+            raise e
 
     def delete_source(self, source):
         """ delete source from index """
