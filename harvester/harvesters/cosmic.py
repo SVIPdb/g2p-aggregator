@@ -3,9 +3,12 @@ import csv
 import itertools
 import json
 import operator
+import os
 import re
 
 import logging
+from collections import defaultdict
+
 import tqdm
 
 # hgvs stuff
@@ -29,13 +32,16 @@ hgnorm = hgvs.normalizer.Normalizer(hdp)
 hgvsparser = hgvs.parser.Parser()
 am = hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh37', normalize=True)
 
+GENE_COUNT_CACHE_FILE = './_cached_cosmic_genes.json'
+COSMIC_MUTANTS_SORTED_FILE = './CosmicMutantExport_sorted.tsv'
+
 
 # ==========================================================================================
 # === harvester implementation
 # ==========================================================================================
 
 def harvest(genes=None):
-    with open("./CosmicMutantExport_sorted.tsv") as cme_fp:
+    with open(COSMIC_MUTANTS_SORTED_FILE) as cme_fp:
         cme_reader = csv.DictReader(cme_fp, dialect='excel-tab')
 
         it = itertools.groupby(cme_reader, operator.itemgetter('Gene name'))
@@ -175,18 +181,8 @@ def convert(gene_data, tq):
 
 
 def harvest_and_convert(genes):
-    # 6699780 comes from running wc -l CosmicMutantExport_sorted.tsv, because it takes a minute+ to compute otherwise
-    if genes:
-        print("Counting samples to insert...")
-        sample_count = 0
-        with open("./CosmicMutantExport_sorted.tsv") as cme_fp:
-            cme_reader = csv.DictReader(cme_fp, dialect='excel-tab')
-            for row in tqdm.tqdm(cme_reader, total=6699780):
-                if not genes or row['Gene name'] in genes:
-                    sample_count += 1
-        print("done!")
-    else:
-        sample_count = 6699780
+    gene_counts = _get_gene_counts()
+    sample_count = sum(gene_counts[g] for g in genes) if genes else gene_counts['_total']
 
     with std_out_err_redirect_tqdm() as orig_stdout:
         with tqdm.tqdm(total=sample_count, desc="harvesting %s" % genes, file=orig_stdout, dynamic_ncols=True) as tq:
@@ -195,7 +191,37 @@ def harvest_and_convert(genes):
                     yield feat_assoc
 
 
-# main
+def _get_gene_counts():
+    # returns a dict of sample counts per gene and a special key, _total, which is the total number of samples
+    # (the dict is computed from COSMIC_MUTANTS_SORTED_FILE the first time, then returned from a cache afterward)
+
+    if os.path.isfile(GENE_COUNT_CACHE_FILE) and \
+       os.path.getmtime(GENE_COUNT_CACHE_FILE) >= os.path.getmtime(COSMIC_MUTANTS_SORTED_FILE):
+        # a cachefile with a more recent modification date exists, so send that back
+        with open(GENE_COUNT_CACHE_FILE, 'r') as fp:
+            gene_counts = json.load(fp)
+    else:
+        # we need to re-count the variants from the source file and recreate/refresh the cache
+        gene_counts = defaultdict(int)
+        total_samples = 0
+
+        with open(COSMIC_MUTANTS_SORTED_FILE) as cme_fp:
+            cme_reader = csv.DictReader(cme_fp, dialect='excel-tab')
+            # 6699780 comes from running wc -l CosmicMutantExport_sorted.tsv, because it takes a minute+ to compute
+            # technically, there are 6699779 samples, but we still need to process the last line...
+            for row in tqdm.tqdm(cme_reader, desc='building per-gene variant count cache', total=6699780):
+                gene_counts[row['Gene name']] += 1
+                total_samples += 1
+
+        gene_counts['_total'] = total_samples
+
+        # write out the gene counts to the cache
+        with open(GENE_COUNT_CACHE_FILE, 'w') as fp:
+            json.dump(gene_counts, fp)
+
+    return gene_counts
+
+
 if __name__ == '__main__':
     for feature_association in harvest_and_convert(["MDM2"]):
         logging.info(feature_association)
