@@ -36,6 +36,43 @@ GENE_COUNT_CACHE_FILE = './_cached_cosmic_genes.json'
 COSMIC_MUTANTS_SORTED_FILE = './CosmicMutantExport_sorted.tsv'
 
 
+def parse_cosmic_cds_change(in_cds):
+    """
+    Parses the COSMIC Mutation CDS string to extract the 'ref' and 'alt' sections. Returns a dict with 'ref' and 'alt'
+    keys.
+
+    We can't use a regular hgvs-parsing library since this is non-standard nomenclature.
+
+    :param in_cds: the coding-sequence change to parse.
+    :return: A dict with 'ref' and 'alt' keys.
+
+    >>> parse_cosmic_cds_change("c.570C>T")
+    {'alt': 'T', 'ref': 'C'}
+    >>> parse_cosmic_cds_change("c.570CC>TT")
+    {'alt': 'TT', 'ref': 'CC'}
+    >>> parse_cosmic_cds_change("c.393delC")
+    {'alt': None, 'ref': 'C'}
+    >>> parse_cosmic_cds_change("c.64_66delTTG")
+    {'alt': None, 'ref': 'TTG'}
+    """
+    patterns = [
+        r"(?P<ref>[ACTG]+)\>(?P<alt>[ACTG]+)$",
+        r"del(?P<ref>[ACTG]+)$",
+        r"ins(?P<alt>[ACTG]+)$",
+    ]
+
+    for pattern in patterns:
+        m = re.search(pattern, in_cds)
+        if m:
+            groups = m.groupdict()
+            return {
+                'ref': groups.get('ref'),
+                'alt': groups.get('alt')
+            }
+
+    return None
+
+
 # ==========================================================================================
 # === harvester implementation
 # ==========================================================================================
@@ -93,9 +130,22 @@ def convert(gene_data, tq):
         match = coord_matcher.match(sample['Mutation genome position'])
         coords = match.groupdict() if match else {}
 
-        # this is way faster and gets us basically the same thing as using the hgvs library, since we don't even
-        # have the right accession anyway...
-        pos_info = parse_hgvc_c(sample['Mutation CDS'])
+        # cosmic uses a weird format for non-single-nucleotide variants, e.g. it uses 98_99CC>TT when it should be
+        #  98_99delinsTT. similarly, it shows the deleted bases in, e.g., c.253_254delGG; the spec states that the
+        #  deleted bases shouldn't be included. since we just need to extract ref and alt here, we can do some ad-hoc
+        #  parsing for each case to get what we need
+
+        # var = hgvsparser.parse_c_variant("%s:%s" % (sample['Accession Number'], sample['Mutation CDS']))
+        # pos_info = {
+        #     'ref': var.posedit.edit.ref,
+        #     'alt': var.posedit.edit.alt
+        # }
+
+        pos_info = parse_cosmic_cds_change(sample['Mutation CDS'])
+
+        # TODO: we should use the accession field plus the CDS change to find the genomic position,
+        #  which is clumsily accomplished later via the location normalizer (just with the protein change, which
+        #  frankly is probably wrong...)
 
         feature = {
             'geneSymbol': gene_data['gene_symbol'],
