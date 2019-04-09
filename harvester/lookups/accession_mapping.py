@@ -1,9 +1,18 @@
 import csv
-
+import sys
 import requests
 import tqdm
+import MySQLdb
 
 ensembl_refseq_map = {}
+
+
+# used for ensembl_txac_to_refseq_ensembldb() to convert ENST IDs to NCBI refseq
+def connect_to_ensembldb():
+    return MySQLdb.connect(host="ensembldb.ensembl.org", user="anonymous", db="homo_sapiens_core_75_37")
+
+
+conn = connect_to_ensembldb()
 
 
 def ensembl_txac_to_refseq_ucsc():
@@ -22,10 +31,14 @@ def ensembl_txac_to_refseq_ucsc():
     return ensembl_refseq_map
 
 
-def ensembl_txac_to_refseq(ensembl_ac, loc='rna'):
+def ensembl_txac_to_refseq_mygene(ensembl_ac, loc='rna'):
     """
     Given an ensembl accession number (e.g., ENSG00000182533.6), searches mygene.info for a match and
     returns related NCBI refseq transcripts.
+
+    Note that this method unfortunately disagrees with ensembldb, e.g. 'ENST00000288602' produces 'NM_001354609.1',
+    whereas ensembldb produces 'NM_004333.4'.
+
     :param ensembl_ac: the ensembl accession number
     :param loc: what kind of transcript to return: 'genomic' (NC_*), 'rna' (NM_*), or 'protein' (NP_*).
     The special value 'all' returns all three types in a dictionary.
@@ -57,3 +70,39 @@ def ensembl_txac_to_refseq(ensembl_ac, loc='rna'):
         }
 
     return [x for x in resp['hits'][0]['refseq'][loc] if x.startswith(loc_prefixes[loc])][0]
+
+
+def ensembl_txac_to_refseq_ensembldb(ensembl_ac, retries=5):
+    global conn
+
+    try:
+        with conn.cursor() as c:
+            # query from https://www.biostars.org/p/106470/#106560 (w/added filter)
+            numrows = c.execute(
+                """SELECT transcript.stable_id, xref.display_label
+                FROM transcript, object_xref, xref, external_db
+                WHERE transcript.transcript_id = object_xref.ensembl_id
+                 AND object_xref.ensembl_object_type = 'Transcript'
+                 AND object_xref.xref_id = xref.xref_id
+                 AND xref.external_db_id = external_db.external_db_id
+                 AND external_db.db_name = 'RefSeq_mRNA'
+                 AND transcript.stable_id=%s;""", (ensembl_ac,)
+            )
+
+            if numrows != 1:
+                raise RuntimeError("Expected one row to map to accession %s, got %d" % (ensembl_ac, numrows))
+
+            results = c.fetchone()
+            return results[1]
+    except MySQLdb.OperationalError, ex:
+        # attempt to reconnect if we have any left
+        if retries > 0:
+            conn.close()
+            conn = connect_to_ensembldb()
+            ensembl_txac_to_refseq_ensembldb(ensembl_ac, retries=retries-1)
+        else:
+            raise RuntimeError("Aborted after too many retry attempts resulted in MySQLdb.OperationalError"), None, sys.exc_info()[2]
+
+
+# we export ensembl_txac_to_refseq for use elsewhere, but can swap the underlying method
+ensembl_txac_to_refseq = ensembl_txac_to_refseq_ensembldb
