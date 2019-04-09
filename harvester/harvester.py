@@ -18,6 +18,7 @@ import yaml
 from utils_ex.instrumentation import DelayedOpLogger, show_runtime_stats
 from normalizers import gene_enricher, disease_normalizer, oncogenic_normalizer, reference_genome_normalizer, \
     biomarker_normalizer, location_normalizer, myvariant_enricher
+from filters import has_hgvs
 
 # these silos are added on line 4, but adding them again allows for code navigation
 # FIXME: the sys.path.append on line 4 should be removed in favor of a real import
@@ -33,6 +34,13 @@ import silos.postgres_silo as postgres_silo
 import requests_cache
 import hashlib
 
+# add handler to global logger
+logger = logging.getLogger()
+logger.addHandler(TqdmLoggingHandler())
+
+# # drop into a shell if we raise an uncaught exception
+# sys.excepthook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
+
 
 # announce each item that's added
 VERBOSE_ITEMS = False
@@ -43,15 +51,34 @@ DUPLICATES = set()
 # cache responses
 requests_cache.install_cache('harvester', allowable_codes=(200, 400, 404))
 
+# a list of normalizers to annotate each feature association (and optionally defines what to report on the console if
+# they take more time than expected to run)
+normalizers = [
+    # FIXME: drug_normalizer removes drug combination info and destroys the capitalization returned by each source.
+    #  it's currently disabled, but it should eventually be fixed.
+    # (drug_normalizer, lambda dol:
+    #     feature_association['association'].get('environmentalContexts', None)),
+
+    (disease_normalizer, lambda dol, feature_association:
+        feature_association['association']['phenotypes'][0]['description']
+        if 'phenotypes' in feature_association['association']
+           and len(feature_association['association']['phenotypes']) > 0 else None),
+    (oncogenic_normalizer, None),  # functionality for oncogenic_normalizer already mostly in harvesters
+    (location_normalizer, None),
+    (reference_genome_normalizer, None),
+    (biomarker_normalizer, None),
+    (gene_enricher, None),
+    (myvariant_enricher, None)
+]
+
+# a list of filters applied to feature associations immediately before yielding to the silo; if any filter returns
+# false for that feature association, it's discarded
+filters = [
+    has_hgvs
+]
+
 args = None
 silos = []
-
-# add handler to global logger
-logger = logging.getLogger()
-logger.addHandler(TqdmLoggingHandler())
-
-# # drop into a shell if we raise an uncaught exception
-# sys.excepthook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
 
 
 def is_duplicate(feature_association):
@@ -171,45 +198,44 @@ def harvest_only(genes):
             yield {'source': h, h: evidence}
 
 
-def _check_dup(harvested):
-    # FIXME: _check_dup() does a lot more than just check for duplicates; it injects essential info into each entry
-    #  it should probably have its name changed to indicate that it's a more essential part of the pipeline, and
-    #  the "normalizers" should be renamed to reflect that they also add important annotations/corrections
-    for feature_association in harvested:
-        feature_association['tags'] = []
-        feature_association['dev_tags'] = []
-        normalize(feature_association)
-        if not is_duplicate(feature_association):
-            yield feature_association
-
-
 def normalize(feature_association):
     """ standard representation of drugs,disease etc. """
-
-    # stores a list of normalizers to apply and optionally what to report on the console if they take >1sec to run
-    normalizers = [
-        # FIXME: this normalizer removes drug combination info and destroys the capitalization returned by each source.
-        #  it's currently disabled, but it should eventually be fixed.
-        # (drug_normalizer, lambda dol:
-        #     feature_association['association'].get('environmentalContexts', None)),
-
-        (disease_normalizer, lambda dol:
-            feature_association['association']['phenotypes'][0]['description']
-            if 'phenotypes' in feature_association['association']
-               and len(feature_association['association']['phenotypes']) > 0 else None),
-        (oncogenic_normalizer, None),  # functionality for oncogenic_normalizer already mostly in harvesters
-        (location_normalizer, None),
-        (reference_genome_normalizer, None),
-        (biomarker_normalizer, None),
-        (gene_enricher, None),
-        (myvariant_enricher, None)
-    ]
 
     for normalizer, more in normalizers:
         with DelayedOpLogger(normalizer.__name__) as d:
             normalizer.normalize_feature_association(feature_association)
             if more:
-                d.logdelayed(more(d))
+                d.logdelayed(more(d, feature_association))
+
+
+# FIXME: _check_dup() does a lot more than just check for duplicates; it injects essential info into each entry
+#  it should probably have its name changed to indicate that it's a more essential part of the pipeline, and
+#  the "normalizers" should be renamed to reflect that they also add important annotations/corrections
+def _check_dup(harvested):
+    ignored_variants = 0
+    duplicated_variants = 0
+
+    for feature_association in harvested:
+        feature_association['tags'] = []
+        feature_association['dev_tags'] = []
+        normalize(feature_association)
+
+        # ensure it's not a duplicate
+        if is_duplicate(feature_association):
+            duplicated_variants += 1
+            continue
+
+        # ensure it passes all the filters
+        if any(not f.filter_feature_association(feature_association) for f in filters):
+            ignored_variants += 1
+            continue
+
+        yield feature_association
+
+    if ignored_variants > 0:
+        logging.info("Variants that failed to pass filters: %d" % ignored_variants)
+    if duplicated_variants > 0:
+        logging.info("Duplicated variants ignored: %d" % duplicated_variants)
 
 
 def main():
