@@ -29,9 +29,29 @@ def populate_args(argparser):
 
 
 class CustomCompare(object):
-    def __init__(self, sql, value):
-        self.sql = sql
+    def __init__(self, sql_stmt, value=None, values=None):
+        self.sql = sql_stmt
         self.value = value
+        self.values = values
+
+
+def compose_params(params):
+    """
+    Produces a flat list of parameters from a mix of regular parameters and CustomCompare params. For CustomCompare
+    entities, if they possess a 'value' only that is passed along, whereas if they have an iterable 'values' set
+    that iterable is flatterened.
+    :param params:
+    :return:
+    """
+    for elem in params:
+        if isinstance(elem, CustomCompare):
+            if elem.value:
+                yield elem.value
+            else:
+                for subelem in elem.values:
+                    yield subelem
+        else:
+            yield elem
 
 
 def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, merge_existing=False):
@@ -66,21 +86,24 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
         lambda x: x[1].sql if isinstance(x[1], CustomCompare) else (sql.Identifier(x[0]) + sql.SQL("=") + sql.Placeholder()),
         key_cols.items()  # x[0] is the column name, x[1] is the value itself
     ))
-    check_stmt = sql.SQL('select id, ({}) as no_update_needed from {} where {}').format(
-        sql.SQL(' and ').join(map(
+    check_stmt = sql.SQL('select id, ({no_update_needed}) as no_update_needed from {target_tbl} where {key_compare}').format(
+        no_update_needed=sql.SQL(' and ').join(map(
             lambda k: sql.SQL("{} = any({})").format(sql.Literal(append_cols[k]), sql.Identifier(k)),
             append_cols.keys()
         )) if append_cols else sql.Literal(True),  # if we have no append_cols, we never need to update
-        sql.Identifier(target_table),
-        cond
+        target_tbl=sql.Identifier(target_table),
+        key_compare=cond
     )
+
+    composed_params = list(compose_params(key_cols.values()))
 
     if VERBOSE:
         logging.info(check_stmt.as_string(curs))
+        logging.info("(parameters: %s)" % composed_params)
 
     # first check if it exists and get its id if so...
     # (note that CustomCompare elements have their value embedded in the object instead of just being the value)
-    curs.execute(check_stmt, [x.value if isinstance(x, CustomCompare) else x for x in key_cols.values()])
+    curs.execute(check_stmt, composed_params)
     result = curs.fetchone()
 
     if result is not None:
@@ -352,8 +375,15 @@ class PostgresSilo:
                 key_cols={
                     'gene_id': this_gene_id,
                     'name': CustomCompare(
-                        sql=sql.SQL("lower({})=lower({})").format(sql.Identifier('name'), sql.Placeholder()),
+                        sql_stmt=sql.SQL("lower({})=lower({})").format(sql.Identifier('name'), sql.Placeholder()),
                         value=feat['name']
+                    ),
+                    'hgvs_c': CustomCompare(
+                        sql_stmt=sql.SQL("({id} is null and {val} is null) or {id}={val}").format(
+                            id=sql.Identifier('hgvs_c'), val=sql.Placeholder()
+                        ),
+                        # duplicated b/c SQL.format() ignores keyed substitutions
+                        values=[feat['hgvs_c'], feat['hgvs_c']]
                     ),
                     # 'biomarker_type': var_obj['biomarker_type']
                     # FIXME: the above might identify differences in punctuation or case as different variants...

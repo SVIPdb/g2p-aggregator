@@ -187,6 +187,9 @@ def normalize(feature):
             normal_reference_name = normalize_referencename(feature['referenceName'])
             if feature.get('refseq'):
                 try:
+                    # FIXME: we get a few HGVS.g strings that look like NC_000007.13:g.140453135delinsAT,
+                    #  which doesn't specify a range for the deletion and thus isn't a valid HGVS string.
+                    #  we should track down where these are coming from and fix it.
                     var_c = am[normal_reference_name].g_to_c(hgvs_rep, tx_ac=feature['refseq'])
                     allele['hgvs_c'] = str(var_c)
 

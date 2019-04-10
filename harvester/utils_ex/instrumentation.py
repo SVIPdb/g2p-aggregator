@@ -32,7 +32,7 @@ class DelayedOpLogger:
 
     If 'aggregate_times' is True, also sums aggregate per-normalizer runtime to the 'runtime_stats' global dict.
     """
-    def __init__(self, name, duration=0.1, aggregate_times=True):
+    def __init__(self, name, duration=1.0, aggregate_times=True):
         self.duration = duration
         self.more = None
         self.name = name
