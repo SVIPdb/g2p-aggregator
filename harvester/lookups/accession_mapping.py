@@ -17,7 +17,7 @@ conn = connect_to_ensembldb()
 
 def ensembl_txac_to_refseq_ucsc():
     # uses UCSS genome browser export file to map ensembl transcript accessions to refseq transcripts
-    with open("./ensembl_refseq_slim.tsv") as fp:
+    with open("../data/ensembl_refseq_slim.tsv") as fp:
         eref_reader = csv.DictReader(fp, dialect='excel-tab')
         for row in tqdm.tqdm(eref_reader, desc="parsing ensembl-to-refseq table"):
             if not row['hg19.kgXref.refseq']:

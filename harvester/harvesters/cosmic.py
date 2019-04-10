@@ -19,7 +19,6 @@ import hgvs.assemblymapper
 
 
 # globals that we use for parsing variant representations
-from cosmic_lookup_table import parse_hgvc_c
 from lookups.accession_mapping import ensembl_txac_to_refseq
 from utils_ex.formatting import capitalize_words
 from utils_ex.tqdm_logger import std_out_err_redirect_tqdm
@@ -32,8 +31,8 @@ hgnorm = hgvs.normalizer.Normalizer(hdp)
 hgvsparser = hgvs.parser.Parser()
 am = hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh37', normalize=True)
 
-GENE_COUNT_CACHE_FILE = './_cached_cosmic_genes.json'
-COSMIC_MUTANTS_SORTED_FILE = './CosmicMutantExport_sorted.tsv'
+GENE_COUNT_CACHE_FILE = '.harvest_cache/_cached_cosmic_genes.json'
+COSMIC_MUTANTS_SORTED_FILE = '../data/CosmicMutantExport_sorted.tsv'
 
 
 def parse_cosmic_cds_change(in_cds):

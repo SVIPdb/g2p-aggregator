@@ -4,7 +4,7 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import json
 import logging
 
-import cosmic_lookup_table
+from lookups import cosmic_lookup_table
 
 LOOKUP_TABLE = None
 gene_list = None
@@ -20,7 +20,7 @@ def _parse_profile(profile):
     global gene_list
     if not LOOKUP_TABLE:
         LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                "./cosmic_lookup_table.tsv")
+                "../data/cosmic_lookup_table.tsv")
     parts = profile.split()
     # this list taken from https://ckb.jax.org/about/glossaryOfTerms
     # "Non specific variants" list, separated by space, where applicable
@@ -175,7 +175,7 @@ def convert(jax_evidence):
                 # Look up variant and add position information.
                 if not LOOKUP_TABLE:
                     LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                                   "./cosmic_lookup_table.tsv")
+                                   "../data/cosmic_lookup_table.tsv")
                 matches = LOOKUP_TABLE.get_entries(gene_index[i], mut_index[i])
                 if len(matches) > 0:
                     # FIXME: just using the first match for now;

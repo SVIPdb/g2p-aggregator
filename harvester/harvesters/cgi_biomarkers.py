@@ -2,8 +2,7 @@ import re
 import pandas
 import logging
 
-import cosmic_lookup_table
-from lookups import evidence_label as el, evidence_direction as ed, mutation_type as mut
+from lookups import evidence_label as el, evidence_direction as ed, mutation_type as mut, cosmic_lookup_table
 
 LOOKUP_TABLE = None
 
@@ -114,7 +113,7 @@ def convert(evidence):
     if len(gDNA) != 0 or len(indiv_mut) != 0:
         if not LOOKUP_TABLE:
             LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                "./cosmic_lookup_table.tsv")
+                "../data/cosmic_lookup_table.tsv")
         for idx, emut in enumerate(indiv_mut):
             # get genomic locus from COSMIC; if mutation not in COSMIC,
             # get locus info from given gDNA instead

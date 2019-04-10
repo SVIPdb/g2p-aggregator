@@ -3,13 +3,10 @@
 from pathlib import Path
 import pandas as pd
 import requests
-from urllib import quote_plus
 
 from tqdm import tqdm
 
-import cosmic_lookup_table
-
-from lookups import evidence_label as el, evidence_direction as ed
+from lookups import cosmic_lookup_table
 from normalizers.gene_enricher import get_gene
 from utils_ex.formatting import unicode_or_none
 
@@ -24,7 +21,7 @@ biov = Path('../data/oncokb_allAnnotatedVariants.txt')
 
 
 # used to get COSMIC info about genes/alterations
-LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("./cosmic_lookup_table.tsv")
+LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("../data/cosmic_lookup_table.tsv")
 
 
 def harvest(genes):
