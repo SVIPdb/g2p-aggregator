@@ -152,7 +152,10 @@ def normalize(feature):
     if feature['ref'] == 'None' or feature['ref'] is None:
         return None, None
 
-    hgvs_rep = genomic_hgvs(feature)
+    # if strand info is present (e.g., from COSMIC), use it to skip a likely round-trip w/allele registry
+    inferred_complement = (feature.get('strand') == '-')
+
+    hgvs_rep = genomic_hgvs(feature, complement=inferred_complement)
     allele = None
     provenance = None
 
@@ -166,7 +169,8 @@ def normalize(feature):
             complement_ref = _complement(feature['ref'])
             if complement_ref == actualAllele:
                 # print 'reverse strand re-try'
-                hgvs_rep = genomic_hgvs(feature, complement=True)
+                # try the opposite of what we tried before
+                hgvs_rep = genomic_hgvs(feature, complement=not inferred_complement)
                 (allele, provenance) = allele_registry(str(hgvs_rep))
             # else:
             #     print 'complement_ref {} m[0] {}'.format(complement_ref,

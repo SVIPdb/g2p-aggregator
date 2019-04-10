@@ -82,6 +82,8 @@ def harvest(genes=None):
 
         it = itertools.groupby(cme_reader, operator.itemgetter('Gene name'))
         if genes is not None:
+            print "Since genes are specified, expect a delay while we iterate through the input until we find the " \
+                  "samples of interest "
             it = itertools.ifilter(lambda x: x[0] in genes, it)
 
         for gene_symbol, samples in it:
@@ -159,7 +161,8 @@ def convert(gene_data, tq):
             'alt': pos_info['alt'] if pos_info else None,
             'name': sample['Mutation AA'][2:],
             'description': "%s %s" % (gene_data['gene_symbol'], sample['Mutation AA'][2:]),
-            'biomarker_type': sample['Mutation Description']
+            'biomarker_type': sample['Mutation Description'],
+            'strand': sample['Mutation strand']
         }
 
         association = {
