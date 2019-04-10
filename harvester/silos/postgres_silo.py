@@ -383,7 +383,7 @@ class PostgresSilo:
                             id=sql.Identifier('hgvs_c'), val=sql.Placeholder()
                         ),
                         # duplicated b/c SQL.format() ignores keyed substitutions
-                        values=[feat['hgvs_c'], feat['hgvs_c']]
+                        values=[feat.get('hgvs_c'), feat.get('hgvs_c')]
                     ),
                     # 'biomarker_type': var_obj['biomarker_type']
                     # FIXME: the above might identify differences in punctuation or case as different variants...
