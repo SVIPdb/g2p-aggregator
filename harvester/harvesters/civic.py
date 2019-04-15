@@ -9,6 +9,8 @@ from tqdm import tqdm
 from normalizers.gene_enricher import get_gene
 from utils_ex.formatting import unicode_or_none
 
+from lookups.accession_mapping import ensembl_txac_to_refseq_ensembldb, NoMatchError
+
 # CIVIC_API_URL = "civic.genome.wustl.edu"
 CIVIC_API_URL = "civicdb.org"
 
@@ -55,6 +57,20 @@ def _extract_name(variant):
         if '-' not in part and not part == variant['entrez_name']:
             return part
 
+
+def matched(l, pred):
+    try:
+        return next(x for x in l if pred(x))
+    except StopIteration:
+        return None
+
+
+def accession(hgvs_str):
+    if not hgvs_str:
+        return None
+    return hgvs_str[:(hgvs_str.index(':'))]
+
+
 def convert(gene_data):
     """ given gene data from civic, convert it to ga4gh """
     try:
@@ -65,20 +81,32 @@ def convert(gene_data):
         gene_meta = get_gene(gene_data['gene'])[0]
 
         for variant in variants:
+            # parse out hgvs strings from 'hgvs_expression' and assign each to a type
+            hgvs_exprs = variant['hgvs_expressions']
+            hgvs_types = {
+                'hgvs_g': matched(hgvs_exprs, lambda x: x.startswith("NC_")),
+                'hgvs_c': matched(hgvs_exprs, lambda x: x.startswith("NM_")),
+                'hgvs_p': matched(hgvs_exprs, lambda x: x.startswith("NP_")),
+                'hgvs_ensembl_c': matched(hgvs_exprs, lambda x: x.startswith("ENST")),
+            }
+
             feature = {
                 'geneSymbol': variant['entrez_name'],
                 'entrez_id': variant['entrez_id'],
                 'start': variant['coordinates']['start'],
                 'end': variant['coordinates']['stop'],
                 'referenceName': unicode_or_none(variant['coordinates']['reference_build']),
-                'refseq': None,
+                'refseq': accession(hgvs_types['hgvs_c']),
                 'isoform': unicode_or_none(variant['coordinates']['representative_transcript']),
                 'chromosome': unicode_or_none(variant['coordinates']['chromosome']),
                 'ref': unicode_or_none(variant['coordinates']['reference_bases']),
                 'alt': unicode_or_none(variant['coordinates']['variant_bases']),
                 'name': variant['name'],
-                'description': '{} {}'.format(variant['entrez_name'], variant['name'])
+                'description': '{} {}'.format(variant['entrez_name'], variant['name']),
             }
+
+            # also insert the hgvs strings to potentially save work for the normalizers downstream
+            feature.update(hgvs_types)
 
             # if our feature is lacking information we can infer from the gene metadata, fill that in
             if not feature['chromosome'] and gene_meta['chromosome']:
@@ -86,6 +114,18 @@ def convert(gene_data):
 
             if 'variant_types' in variant and len(variant['variant_types']) > 0:
                 feature['biomarker_type'] = variant['variant_types'][0]['display_name']
+
+            # if the referenceName (aka the assembly) is missing, we might be able to infer it from the ensembl version
+            if feature['referenceName'] is None and variant['coordinates']['ensembl_version'] == 75:
+                feature['referenceName'] = 'GRCh37'
+
+            # if the refseq is still missing but isoform is specified, attempt to convert that into an NCBI refseq
+            if not feature['refseq'] and feature['isoform']:
+                try:
+                    feature['refseq'] = ensembl_txac_to_refseq_ensembldb(feature['isoform'])
+                except NoMatchError as ex:
+                    logging.warn(ex)
+                    feature['refseq'] = None
 
             for evidence_item in variant['evidence_items']:
                 # FIXME: maybe we should skip entries where the evidence item was rejected; see evidence_item['status']
