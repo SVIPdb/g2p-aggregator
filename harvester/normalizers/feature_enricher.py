@@ -91,7 +91,7 @@ def fetch_variant_pos(gene_symbol, name, loose_search=True):
     # url = "http://myvariant.info/v1/query?q={}".format(feature['description'])
     # this is a fixed URL which queries specifically for snpeff entries by genename and protein-level change
     url = "http://myvariant.info/v1/query"
-    params = {'fields': 'hg19,vcf,snpeff,chrom'}
+    params = {'fields': 'hg19,vcf,snpeff,chrom,cadd'}
     remapped = to_hgvs_p(name)
 
     if remapped is not None:
@@ -133,10 +133,20 @@ def _enrich_feature(feature, provenance_rule='default'):
     if hit:
         hg19 = hit.get('hg19')
         vcf = hit.get('vcf')
-        if 'ref' in vcf:
+
+        # VCF ref, alt values for non-SNPs consist of an extra 'reference' base
+        # for positioning the edit. for example, p.Gly465del is represented as
+        # ref: 'TTCC', alt: 'T', whereas pyhgvs expects ref: 'TTC', alt: ''.
+
+        # so, if either are not len(1) we have to lop off a symbol from both
+        if 'ref' in vcf and 'alt' in vcf:
+            if len(vcf['ref']) > 1 or len(vcf['alt']) > 1:
+                vcf['ref'] = vcf['ref'][1:]
+                vcf['alt'] = vcf['alt'][1:]
+
             feature['ref'] = vcf['ref']
-        if 'alt' in vcf:
             feature['alt'] = vcf['alt']
+
         if 'chrom' in hit:
             feature['chromosome'] = str(hit['chrom'])
         if 'start' in hg19:
