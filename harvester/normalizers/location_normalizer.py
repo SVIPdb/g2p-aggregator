@@ -8,6 +8,8 @@ import copy
 import hgvs.location
 import hgvs.posedit
 import hgvs.edit
+import hgvs.parser
+from hgvs.exceptions import HGVSInvalidVariantError, HGVSError
 from hgvs.sequencevariant import SequenceVariant
 import hgvs.dataproviders.uta
 import hgvs.assemblymapper
@@ -16,22 +18,27 @@ from normalizers.feature_enricher import enrich
 
 from normalizers.reference_genome_normalizer import normalize as normalize_referencename
 
+from utils_ex.instrumentation import add_crawl_status
 
 # these shared assembly mappers will allow us to convert HGVS g. variants to c. and p. later on
 hdp = hgvs.dataproviders.uta.connect()
 hgnorm = hgvs.normalizer.Normalizer(hdp)
+hgvsparser = hgvs.parser.Parser()
 am = {
     'GRCh37': hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh37', normalize=True),
     'GRCh38': hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh38', normalize=True)
 }
 
 
-def _complement(bases):
+def _complement(bases, reverse=True):
     """
     return complement of bases string
     """
     complements = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
-    return ''.join([complements.get(base, base) for base in bases])
+    if reverse:
+        return ''.join([complements.get(base, base) for base in reversed(bases)])
+    else:
+        return ''.join([complements.get(base, base) for base in bases])
 
 
 def _get_ref_alt(description):
@@ -98,6 +105,18 @@ def genomic_hgvs(feature, complement=False, description=False):
     }
     ac = ac_map[feature['chromosome']]
 
+    # Make an edit object
+    ref = feature.get('ref', None)
+    if ref == '-' or ref == '':
+        ref = None
+    alt = feature.get('alt', None)
+    if alt == '-' or alt == '':
+        alt = None
+
+    if complement:
+        ref = _complement(ref) if ref else None
+        alt = _complement(alt) if alt else None
+
     if 'start' in feature and feature['start']:
         start = hgvs.location.SimplePosition(base=int(feature['start']))
     else:
@@ -106,21 +125,11 @@ def genomic_hgvs(feature, complement=False, description=False):
     if 'end' in feature and feature['end']:
         end = hgvs.location.SimplePosition(base=int(feature['end']))
     else:
-        end = start
+        # if 'end' isn't specified, we can kind of assume it's going to cover the reference, at least
+        # (it's -1 because a SNP's start == end)
+        end = hgvs.location.SimplePosition(base=int(feature['start']) + max(0, len(ref)-1))
 
     iv = hgvs.location.Interval(start=start, end=end)
-
-    # Make an edit object
-    ref = feature.get('ref', None)
-    if ref == '-':
-        ref = None
-    alt = feature.get('alt', None)
-    if alt == '-':
-        alt = None
-
-    if complement:
-        ref = _complement(ref)
-        alt = _complement(alt)
 
     feature_description = feature.get('description', feature.get('name', None))
     edit = hgvs.edit.NARefAlt(ref=ref, alt=alt)
@@ -144,18 +153,20 @@ def genomic_hgvs(feature, complement=False, description=False):
     return var
 
 
+def _key_na_in_dict(k, o):
+    return k not in o or o[k] is None or o[k] == 'None'
+
+
 def normalize(feature):
-    if 'referenceName' not in feature or 'chromosome' not in feature or 'ref' not in feature:
-        return None, None
-    if feature['chromosome'] == 'None' or feature['chromosome'] is None:
-        return None, None
-    if feature['ref'] == 'None' or feature['ref'] is None:
+    if any(_key_na_in_dict(k, feature) for k in ('referenceName', 'chromosome', 'ref')):
         return None, None
 
     # if strand info is present (e.g., from COSMIC), use it to skip a likely round-trip w/allele registry
     inferred_complement = (feature.get('strand') == '-')
 
-    hgvs_rep = genomic_hgvs(feature, complement=inferred_complement)
+    # if hgvs_g has already been specified, use that, otherwise attempt to compute it ourselves
+    hgvs_rep = hgvsparser.parse_g_variant(feature['hgvs_g']) if 'hgvs_g' in feature and feature['hgvs_g'] \
+        else genomic_hgvs(feature, complement=inferred_complement)
     allele = None
     provenance = None
 
@@ -185,6 +196,10 @@ def normalize(feature):
             # hgvs_rep = hgnorm.normalize(hgvs_rep)
             allele['hgvs_g'] = str(hgvs_rep)
 
+            # FIXME: it's quite possible that the allele registry has returned hgvs strings for us in the genomicAlleles,
+            #  and transcriptAlleles keys. we should probably consult those if HGVS remapping fails, e.g. due to a missing
+            #  refseq
+
             # also use the variant mapper to convert hgvs_rep to the c. and p. versions as well, if possible
             # to accomplish that, we'll need the reference sequence. in this case, the hgvs coordinates are more
             # stringently validated than for genomic coords (e.g., delins position coords have to match the edit length)
@@ -194,19 +209,38 @@ def normalize(feature):
                     # FIXME: we get a few HGVS.g strings that look like NC_000007.13:g.140453135delinsAT,
                     #  which doesn't specify a range for the deletion and thus isn't a valid HGVS string.
                     #  we should track down where these are coming from and fix it.
-                    var_c = am[normal_reference_name].g_to_c(hgvs_rep, tx_ac=feature['refseq'])
-                    allele['hgvs_c'] = str(var_c)
+                    if not feature.get('hgvs_c'):
+                        var_c = am[normal_reference_name].g_to_c(hgvs_rep, tx_ac=feature['refseq'])
+                        allele['hgvs_c'] = str(var_c)
+                    else:
+                        var_c = hgvsparser.parse_c_variant(feature.get('hgvs_c'))
+                        allele['hgvs_c'] = str(var_c)
 
-                    if var_c:
+                    # now that we have an hgvs.c, let's see if we can get an hgvs.p
+                    if var_c and not feature.get('hgvs_p'):
                         var_p = am[normal_reference_name].c_to_p(var_c)
                         if var_p.posedit:
+                            # FIXME: verify that we should be flagging this as certain
                             var_p.posedit.uncertain = False
                         allele['hgvs_p'] = str(var_p)
-                except Exception as e:
-                    logging.warn(
+
+                except HGVSError:
+                    message = (
                         "Couldn't produce HGVS c. and p. strings for g. string '%s' with assembly/refseq '%s'/'%s'" %
-                        (allele['hgvs_g'], normal_reference_name, feature['refseq']))
-                    logging.warn("Traceback: %s" % traceback.format_exc())
+                        (allele['hgvs_g'], normal_reference_name, feature['refseq'])
+                    )
+                    edit_msg = "Edit: %s, %s" % (repr(hgvs_rep.posedit.edit), str(hgvs_rep.posedit.edit))
+                    traceback_msg = traceback.format_exc()
+
+                    logging.warn(message)
+                    logging.warn(edit_msg)
+                    logging.warn(traceback_msg)
+
+                    add_crawl_status(feature, __name__, {
+                        'message': message,
+                        'edit': edit_msg,
+                        'traceback': traceback_msg
+                    })
 
     return allele, provenance
 
@@ -250,10 +284,15 @@ def _apply_allele_registry(feature, allele_registry, provenance):
     feature['provenance'].append(provenance)
 
     # capture the extremely useful hgvs_g field from the allele registry as well
-    feature['hgvs_g'] = allele_registry['hgvs_g']
+    if _key_na_in_dict('hgvs_g', feature):
+        feature['hgvs_g'] = allele_registry['hgvs_g']
+
     # also try to get hgvs_c, hgvs_p, but they may not be available if assemblymapper fails
-    feature['hgvs_c'] = allele_registry.get('hgvs_c')
-    feature['hgvs_p'] = allele_registry.get('hgvs_p')
+    if _key_na_in_dict('hgvs_c', feature):
+        feature['hgvs_c'] = allele_registry.get('hgvs_c')
+
+    if _key_na_in_dict('hgvs_p', feature):
+        feature['hgvs_p'] = allele_registry.get('hgvs_p')
 
 
 def _fix_location_end(feature):
@@ -280,6 +319,10 @@ def normalize_feature_association(feature_association):
     normalized_features = []
 
     for feature in feature_association['features']:
+        # skip features that already have hgvs_g, hgvs_c, and hgvs_p fields
+        if all(not _key_na_in_dict(k, feature) for k in ('hgvs_g', 'hgvs_c', 'hgvs_p')):
+            continue
+
         try:
             # ensure we have location, enrich can create new features
             enriched_features = enrich(copy.deepcopy(feature), feature_association)
@@ -297,7 +340,11 @@ def normalize_feature_association(feature_association):
             feature_association['features'] = normalized_features
 
         except Exception as e:
-            logging.exception('exception {} feature {} allele {}'.format(e, feature, allele_registry_instance))
+            message = 'exception {} feature {} allele {}'.format(e, feature, allele_registry_instance)
+            logging.exception(message)
+            add_crawl_status(feature, __name__, {
+                'message': message
+            })
 
 
 def _test(feature):
