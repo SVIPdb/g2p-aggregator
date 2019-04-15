@@ -212,30 +212,33 @@ def normalize(feature_association):
 #  it should probably have its name changed to indicate that it's a more essential part of the pipeline, and
 #  the "normalizers" should be renamed to reflect that they also add important annotations/corrections
 def _check_dup(harvested):
-    ignored_variants = 0
-    duplicated_variants = 0
+    total_fas = 0
+    ignored_fas = 0
+    duplicated_fas = 0
 
     for feature_association in harvested:
+        total_fas += 1
+
         feature_association['tags'] = []
         feature_association['dev_tags'] = []
         normalize(feature_association)
 
         # ensure it's not a duplicate
         if is_duplicate(feature_association):
-            duplicated_variants += 1
+            duplicated_fas += 1
             continue
 
         # ensure it passes all the filters
         if any(not f.filter_feature_association(feature_association) for f in filters):
-            ignored_variants += 1
+            ignored_fas += 1
             continue
 
         yield feature_association
 
-    if ignored_variants > 0:
-        logging.info("Variants that failed to pass filters: %d" % ignored_variants)
-    if duplicated_variants > 0:
-        logging.info("Duplicated variants ignored: %d" % duplicated_variants)
+    if ignored_fas > 0:
+        logging.info("FAs that failed to pass filters: %d (out of %d)" % (ignored_fas, total_fas))
+    if duplicated_fas > 0:
+        logging.info("Duplicated FAs ignored: %d (out of %d)" % (duplicated_fas, total_fas))
 
 
 def main():

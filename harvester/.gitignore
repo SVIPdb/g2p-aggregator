@@ -4,3 +4,4 @@
 /output*
 /.harvest_cache
 /.local_env
+.venv
