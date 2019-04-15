@@ -9,7 +9,7 @@ def filter_feature_association(feature_association):
     :return: True if the association has an HGVS.c string, False otherwise
     """
     try:
-        if not feature_association['features'][0]['hgvs_c']:
+        if not feature_association['features'][0]['hgvs_g']:
             return False
     except KeyError or IndexError:
         return False

@@ -378,12 +378,12 @@ class PostgresSilo:
                         sql_stmt=sql.SQL("lower({})=lower({})").format(sql.Identifier('name'), sql.Placeholder()),
                         value=feat['name']
                     ),
-                    'hgvs_c': CustomCompare(
-                        sql_stmt=sql.SQL("({id} is null and {val} is null) or {id}={val}").format(
-                            id=sql.Identifier('hgvs_c'), val=sql.Placeholder()
+                    'hgvs_g': CustomCompare(
+                        sql_stmt=sql.SQL("(({id} is null and {val} is null) or {id}={val})").format(
+                            id=sql.Identifier('hgvs_g'), val=sql.Placeholder()
                         ),
                         # duplicated b/c SQL.format() ignores keyed substitutions
-                        values=[feat.get('hgvs_c'), feat.get('hgvs_c')]
+                        values=[feat.get('hgvs_g'), feat.get('hgvs_g')]
                     ),
                     # 'biomarker_type': var_obj['biomarker_type']
                     # FIXME: the above might identify differences in punctuation or case as different variants...
