@@ -231,13 +231,8 @@ class PostgresSilo:
             # drop everything that we'd be inserting and reset the IDs
             with self._connect() as conn:
                 with conn.cursor() as curs:
-                    curs.execute("delete from api_environmentalcontext")
-                    curs.execute("delete from api_evidence")
-                    curs.execute("delete from api_phenotype")
-                    curs.execute("delete from api_association")
-                    curs.execute("delete from api_variantinsource")
-                    curs.execute("delete from api_svipvariant")
-                    curs.execute("delete from api_variant")
+                    # if you delete all the genes the cascading delete clears everything in the database,
+                    # since everything is keyed to a gene at some point
                     curs.execute("delete from api_gene")
                     curs.execute("alter sequence api_environmentalcontext_id_seq restart with 1")
                     curs.execute("alter sequence api_evidence_id_seq restart with 1")
@@ -260,12 +255,16 @@ class PostgresSilo:
 
             with self._connect() as conn:
                 with conn.cursor() as curs:
-                    # FIXME: we *really* need to implement db-level cascading deletes, this is broken
-                    curs.execute("delete from api_environmentalcontext")
-                    curs.execute("delete from api_evidence")
-                    curs.execute("delete from api_phenotype")
-                    curs.execute("delete from api_variant where %s = any(sources)", (source,))
-                    # curs.execute("delete from api_gene where sources ? %s", (source,))
+                    curs.execute("delete from api_source where name=%s", (source,))
+                    # after removing the source, and thus variant-in-source entries, remove any orphaned variants
+                    # (i.e., variants with no remaining supporting entries...)
+                    # FIXME: eventually we'll have SVIP variants that may or may not have entries in external databases.
+                    #  we'll either need to represent SVIP as another entry in api_source/api_variantinsource, or
+                    #  simply allow variants with no public supporting evidence to continue to exist.
+                    curs.execute(
+                        """delete from api_variant
+                        where not exists (select * from api_variantinsource as avs where avs.variant_id=v.id)"""
+                    )
                 conn.commit()
             logging.info("...completed clearing for source {}".format(source))
 
@@ -516,6 +515,16 @@ class PostgresSilo:
         with conn.cursor() as curs:
             curs.execute("select * from api_source")
             self.source_to_id = dict((x[1], x[0]) for x in curs.fetchall())
+
+            if len(self.source_to_id) == 0:
+                # FIXME: ideally we should ensure this elsewhere, but for now let's make sure we have some sources
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
+
+                print("Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
+
 
         # split transactions by source (for now)
         for source, source_feats in itertools.groupby(feature_association_generator, key=operator.itemgetter('source')):
