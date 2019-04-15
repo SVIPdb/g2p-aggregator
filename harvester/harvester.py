@@ -74,7 +74,7 @@ normalizers = [
 # a list of filters applied to feature associations immediately before yielding to the silo; if any filter returns
 # false for that feature association, it's discarded
 filters = [
-    has_hgvs
+    # has_hgvs
 ]
 
 args = None
