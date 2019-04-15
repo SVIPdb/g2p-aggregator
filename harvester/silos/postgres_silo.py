@@ -8,6 +8,7 @@ import operator
 import psycopg2
 from psycopg2 import sql
 
+from utils_ex.formatting import jsonify_or_none
 
 VERBOSE = False
 
@@ -352,7 +353,9 @@ class PostgresSilo:
                 'dbsnp_ids': feat.get('dbsnp_ids'),
                 'myvariant_hg19': feat.get('myvariant_hg19'),
 
-                'mv_info': json.dumps(feat.get('mv_info'))  # optional info from the myvariant_enricher "normalizer"
+                'mv_info': jsonify_or_none(feat.get('mv_info')),  # optional info from the myvariant_enricher "normalizer",
+
+                'crawl_status': jsonify_or_none(feat.get('crawl_status'))
             }
 
             if 'sequence_ontology' in feat:
@@ -437,6 +440,8 @@ class PostgresSilo:
             'evidence_direction': assoc.get('evidence_direction'),
             'clinical_significance': assoc.get('clinical_significance'),
             'evidence_level': assoc.get('evidence_level'),
+
+            'crawl_status': jsonify_or_none(assoc.get('crawl_status'))
         }
 
         curs.execute(

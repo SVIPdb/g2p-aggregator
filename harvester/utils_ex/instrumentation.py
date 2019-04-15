@@ -60,3 +60,19 @@ class DelayedOpLogger:
                 logging.info("%s delayed %.3fs; %s" % (self.name, elapsed, " ".join(str(x) for x in self.more)))
             else:
                 logging.info("%s delayed %.3fs" % (self.name, elapsed))
+
+
+def add_crawl_status(obj, subkey, entry):
+    """
+    Ensures first that obj has a dict called 'crawl_status', then that it has an array obj['crawl_status'][subkey],
+    then concatenates entry to that array.
+    :param obj: the object to annotate with a status entry
+    :param subkey: the subkey within the status record, e.g. 'location_normalizer' for errors encountered in that module.
+    :param entry: the actual log entry to store, e.g. "HGVS parsing failed"
+    :return:
+    """
+
+    if 'crawl_status' not in obj:
+        obj['crawl_status'] = defaultdict(list)
+
+    obj['crawl_status'][subkey].append(entry)

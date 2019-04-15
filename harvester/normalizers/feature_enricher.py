@@ -1,3 +1,5 @@
+import traceback
+
 import requests
 from lookups import mutation_type as mut
 import logging
@@ -6,6 +8,7 @@ import copy
 from normalizers import gene_enricher
 
 from lookups.prot_to_hgvs import to_hgvs_p
+from utils_ex.instrumentation import add_crawl_status
 
 
 def _enrich_ensemble(feature, transcript_id, exon, provenance_rule):
@@ -276,5 +279,6 @@ def enrich(feature, feature_association):
 
     except Exception as e:
         logging.error(feature, exc_info=1)
+        add_crawl_status(feature, __name__, "failed in enricher: %s" % traceback.format_exc())
 
     return enriched_features
