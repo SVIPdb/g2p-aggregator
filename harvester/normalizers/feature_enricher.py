@@ -201,14 +201,16 @@ def enrich(feature, feature_association):
 
         enriched_features = []
 
-        if not _is_gene([description_parts[0]]) and len(description_parts[0].split('-')) == 2 and _is_gene(description_parts[0].split('-')):
+        # we know the description has at least [0] == gene symbol
+
+        if not _is_gene([description_parts[1]]) and len(description_parts[1].split('-')) == 2 and _is_gene(description_parts[1].split('-')):
             # it's a fusion, e.g. BRAF-EGFR etc.
             # we determine that by first checking if the thing isn't a gene as a whole ("BRAF-EGFR" is of course not),
             # then by checking if we get exactly two pieces when we split it on the hyphen,
             # then by checking if each piece *is* a gene
 
             # split out the fusion donor, acceptor and enrich gene information for each one individually
-            fusion_donor, fusion_acceptor = description_parts[0].split('-')
+            fusion_donor, fusion_acceptor = description_parts[1].split('-')
 
             feature_fusion_donor = _enrich_gene(copy.deepcopy(feature), fusion_donor, provenance_rule='is_fusion_donor')
             feature_fusion_donor['geneSymbol'] = fusion_donor
