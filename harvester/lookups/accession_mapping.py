@@ -15,6 +15,10 @@ def connect_to_ensembldb():
 conn = connect_to_ensembldb()
 
 
+class NoMatchError(RuntimeError):
+    pass
+
+
 def ensembl_txac_to_refseq_ucsc():
     # uses UCSS genome browser export file to map ensembl transcript accessions to refseq transcripts
     with open("../data/ensembl_refseq_slim.tsv") as fp:
@@ -72,25 +76,36 @@ def ensembl_txac_to_refseq_mygene(ensembl_ac, loc='rna'):
     return [x for x in resp['hits'][0]['refseq'][loc] if x.startswith(loc_prefixes[loc])][0]
 
 
-def ensembl_txac_to_refseq_ensembldb(ensembl_ac, retries=5):
+def ensembl_txac_to_refseq_ensembldb(ensembl_ac, use_version=True, retries=5):
     global conn
 
     try:
         with conn.cursor() as c:
             # query from https://www.biostars.org/p/106470/#106560 (w/added filter)
-            numrows = c.execute(
-                """SELECT transcript.stable_id, xref.display_label
+
+            if use_version and '.' in ensembl_ac:
+                ensembl_ac_stable, version = ensembl_ac.split('.')
+            else:
+                ensembl_ac_stable, version = None, None
+
+            query = """
+                SELECT transcript.stable_id, xref.display_label
                 FROM transcript, object_xref, xref, external_db
                 WHERE transcript.transcript_id = object_xref.ensembl_id
                  AND object_xref.ensembl_object_type = 'Transcript'
                  AND object_xref.xref_id = xref.xref_id
                  AND xref.external_db_id = external_db.external_db_id
                  AND external_db.db_name = 'RefSeq_mRNA'
-                 AND transcript.stable_id=%s;""", (ensembl_ac,)
-            )
+                 AND transcript.stable_id=%s
+             """
+
+            if use_version and ensembl_ac_stable is not None and version is not None:
+                numrows = c.execute(query + " AND transcript.version=%s", (ensembl_ac_stable, version))
+            else:
+                numrows = c.execute(query, (ensembl_ac,))
 
             if numrows != 1:
-                raise RuntimeError("Expected one row to map to accession %s, got %d" % (ensembl_ac, numrows))
+                raise NoMatchError("Expected one row to map to accession %s, got %d" % (ensembl_ac, numrows))
 
             results = c.fetchone()
             return results[1]
@@ -99,9 +114,9 @@ def ensembl_txac_to_refseq_ensembldb(ensembl_ac, retries=5):
         if retries > 0:
             conn.close()
             conn = connect_to_ensembldb()
-            ensembl_txac_to_refseq_ensembldb(ensembl_ac, retries=retries-1)
+            ensembl_txac_to_refseq_ensembldb(ensembl_ac, use_version=use_version, retries=retries-1)
         else:
-            raise RuntimeError("Aborted after too many retry attempts resulted in MySQLdb.OperationalError"), None, sys.exc_info()[2]
+            raise NoMatchError("Aborted after too many retry attempts resulted in MySQLdb.OperationalError"), None, sys.exc_info()[2]
 
 
 # we export ensembl_txac_to_refseq for use elsewhere, but can swap the underlying method
