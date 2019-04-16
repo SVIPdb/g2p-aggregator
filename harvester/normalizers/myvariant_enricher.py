@@ -2,7 +2,7 @@ import logging
 import requests
 
 SOURCES = (
-    'cadd', 'exac', 'gnomad_genome'
+    'cadd', 'dbnsfp', 'exac', 'gnomad_genome'
 )
 
 
