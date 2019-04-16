@@ -1,6 +1,7 @@
 """
 Contains miscellaneous iterable-manipulation methods.
 """
+from itertools import ifilter
 
 
 def try_flatten(seq, scalar_classes=(str,)):
@@ -30,3 +31,20 @@ def try_flatten(seq, scalar_classes=(str,)):
                     yield subitem
             except TypeError:
                 yield item
+
+
+def matched(l, pred):
+    """
+    Returns the first element in iterable 'l' that satisfies predicate 'pred', or None if none is found.
+
+    :param l: the iterable to scan for elements that satisfy the predicate
+    :param pred: a predicate that takes an element and returns a boolean value
+    :return: the matching element if found, else None
+    """
+
+    # try:
+    #     return next(x for x in l if pred(x))
+    # except StopIteration:
+    #     return None
+
+    return next(ifilter(pred, l), None)

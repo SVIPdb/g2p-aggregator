@@ -12,6 +12,8 @@ from utils_ex.formatting import unicode_or_none
 from lookups.accession_mapping import ensembl_txac_to_refseq_ensembldb, NoMatchError
 
 # CIVIC_API_URL = "civic.genome.wustl.edu"
+from utils_ex.iterables import matched
+
 CIVIC_API_URL = "civicdb.org"
 
 
@@ -56,13 +58,6 @@ def _extract_name(variant):
     for part in variant['name'].split():
         if '-' not in part and not part == variant['entrez_name']:
             return part
-
-
-def matched(l, pred):
-    try:
-        return next(x for x in l if pred(x))
-    except StopIteration:
-        return None
 
 
 def accession(hgvs_str):
