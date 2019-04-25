@@ -85,19 +85,21 @@ def ensembl_txac_to_refseq_mygene(ensembl_ac, loc='rna'):
 
 def ensembl_txac_to_refseq_ensembldb(ensembl_ac, use_version=True, retries=5, strict_match=False):
     """
-        Returns the corresponding NCBI RefSeq accession ID for the given ensemble transcript accession ID, if it exists.
+    Returns the corresponding NCBI RefSeq accession ID for the given ensemble transcript accession ID, if it exists.
 
-        This method queries the MySQL server at ensembldb.org directly every time.
+    This method queries the MySQL server at ensembldb.org directly every time.
 
-        >>> _cached_ensembl_txac_to_refseq("ENST00000216024")
-        'NM_007068.3'
-        >>> _cached_ensembl_txac_to_refseq("ENST00000206451.6")  # if multiple items exist, the first is returned
-        'NM_006263.3'
+    >>> ensembl_txac_to_refseq_ensembldb("ENST00000216024")
+    'NM_007068.3'
+    >>> ensembl_txac_to_refseq_ensembldb("ENST00000206451.6")  # if multiple items exist, the first is returned
+    'NM_006263.3'
 
-        :param ensembl_ac: the ensembl transcript accession ID, e.g. "ENST00000216024.2" (the version, i.e., ".2", is optional)
-        :param use_version: if true, uses the version given in the ensembl accession ID, if it was specified
-        :return: the matching refseq ID if found, else None
-        """
+    :param ensembl_ac: the ensembl transcript accession ID, e.g. "ENST00000216024.2" (the version, i.e., ".2", is optional)
+    :param use_version: if true, uses the version given in the ensembl accession ID, if it was specified
+    :param retries: the number of times to re-attempt the query before aborting
+    :param strict_match: if True, throws an exception if there is not exactly one match
+    :return: the matching refseq ID if found, else None
+    """
 
     global conn
     first_pass = True
@@ -136,7 +138,7 @@ def ensembl_txac_to_refseq_ensembldb(ensembl_ac, use_version=True, retries=5, st
                 results = c.fetchone()
                 return results[1]  # we return the second field, i.e. display_label
 
-        except MySQLdb.OperationalError, ex:
+        except MySQLdb.OperationalError as ex:
             # attempt to reconnect if we have any left
             if retries > 0:
                 retries -= 1
