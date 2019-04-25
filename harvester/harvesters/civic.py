@@ -19,6 +19,7 @@ CIVIC_API_URL = "civicdb.org"
 
 def harvest(genes):
     """ given an array of gene symbols, harvest them from civic"""
+
     # harvest all genes
     if not genes:
         r = requests.get('https://%s/api/genes?count=99999' % CIVIC_API_URL)
@@ -27,25 +28,29 @@ def harvest(genes):
             gene = record['name']
             variants_details = []
             for variant in tqdm(variants, desc="fetching civic variant data for %s" % gene):
-                r = requests.get('https://%s/api/variants/{}'.format(variant['id']))
+                r = requests.get('https://{}/api/variants/{}'.format(CIVIC_API_URL, variant['id']))
                 variants_details.append(r.json())
             gene_data = {'gene': gene, 'civic': {'variants': variants_details}}
             yield gene_data
+
     else:
         # harvest some genes
         for gene in set(genes):
             r = requests.get('https://{}/api/genes/{}?identifier_type=entrez_symbol'.format(CIVIC_API_URL, gene))
+
             if r.status_code != 200 or len(r.json()['variants']) == 0:
-                # print "{} Found no variants in civic".format(gene)
+                logging.info("Found no variants in CIViC for gene {}".format(gene))
                 gene_data = {'gene': gene, 'civic': {'variants': []}}
             else:
                 variants = r.json()['variants']
                 variants_details = []
+
                 for variant in tqdm(variants, desc="fetching civic variant data for %s" % gene):
-                    r = requests.get('https://{}/api/variants/{}'.format(CIVIC_API_URL, variant['id']))
-                    variants_details.append(r.json())
-                gene_data = {'gene': gene,
-                             'civic': {'variants': variants_details}}
+                    v = requests.get('https://{}/api/variants/{}'.format(CIVIC_API_URL, variant['id']))
+                    variants_details.append(v.json())
+
+                gene_data = {'gene': gene, 'civic': {'variants': variants_details}}
+
             yield gene_data
 
 
