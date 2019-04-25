@@ -9,7 +9,7 @@ from tqdm import tqdm
 from normalizers.gene_enricher import get_gene
 from utils_ex.formatting import unicode_or_none
 
-from lookups.accession_mapping import ensembl_txac_to_refseq_ensembldb, NoMatchError
+from lookups.accession_mapping import NoMatchError, ensembl_txac_to_refseq
 
 # CIVIC_API_URL = "civic.genome.wustl.edu"
 from utils_ex.iterables import matched
@@ -73,136 +73,132 @@ def accession(hgvs_str):
 
 def convert(gene_data):
     """ given gene data from civic, convert it to ga4gh """
-    try:
-        variants = gene_data['civic']['variants']
+    variants = gene_data['civic']['variants']
 
-        # we can get some coarse location info, e.g. the chromosome, from the gene symbol itself
-        # we'll retrieve that as a failover in case the civic entry is missing that info
-        gene_meta = get_gene(gene_data['gene'])[0]
+    # we can get some coarse location info, e.g. the chromosome, from the gene symbol itself
+    # we'll retrieve that as a failover in case the civic entry is missing that info
+    gene_meta = get_gene(gene_data['gene'])[0]
 
-        for variant in variants:
-            # parse out hgvs strings from 'hgvs_expression' and assign each to a type
-            hgvs_exprs = variant['hgvs_expressions']
-            hgvs_types = {
-                'hgvs_g': matched(hgvs_exprs, lambda x: x.startswith("NC_")),
-                'hgvs_c': matched(hgvs_exprs, lambda x: x.startswith("NM_")),
-                'hgvs_p': matched(hgvs_exprs, lambda x: x.startswith("NP_")),
-                'hgvs_ensembl_c': matched(hgvs_exprs, lambda x: x.startswith("ENST")),
+    for variant in variants:
+        # parse out hgvs strings from 'hgvs_expression' and assign each to a type
+        hgvs_exprs = variant['hgvs_expressions']
+        hgvs_types = {
+            'hgvs_g': matched(hgvs_exprs, lambda x: x.startswith("NC_")),
+            'hgvs_c': matched(hgvs_exprs, lambda x: x.startswith("NM_")),
+            'hgvs_p': matched(hgvs_exprs, lambda x: x.startswith("NP_")),
+            'hgvs_ensembl_c': matched(hgvs_exprs, lambda x: x.startswith("ENST")),
+        }
+
+        feature = {
+            'geneSymbol': variant['entrez_name'],
+            'entrez_id': variant['entrez_id'],
+            'start': variant['coordinates']['start'],
+            'end': variant['coordinates']['stop'],
+            'referenceName': unicode_or_none(variant['coordinates']['reference_build']),
+            'refseq': accession(hgvs_types['hgvs_c']),
+            'isoform': unicode_or_none(variant['coordinates']['representative_transcript']),
+            'chromosome': unicode_or_none(variant['coordinates']['chromosome']),
+            'ref': unicode_or_none(variant['coordinates']['reference_bases']),
+            'alt': unicode_or_none(variant['coordinates']['variant_bases']),
+            'name': variant['name'],
+            'description': '{} {}'.format(variant['entrez_name'], variant['name']),
+        }
+
+        # also insert the hgvs strings to potentially save work for the normalizers downstream
+        feature.update(hgvs_types)
+
+        # if our feature is lacking information we can infer from the gene metadata, fill that in
+        if not feature['chromosome'] and gene_meta['chromosome']:
+            feature['chromosome'] = gene_meta['chromosome']
+
+        if 'variant_types' in variant and len(variant['variant_types']) > 0:
+            feature['biomarker_type'] = variant['variant_types'][0]['display_name']
+
+        # if the referenceName (aka the assembly) is missing, we might be able to infer it from the ensembl version
+        if feature['referenceName'] is None and variant['coordinates']['ensembl_version'] == 75:
+            feature['referenceName'] = 'GRCh37'
+
+        # if the refseq is still missing but isoform is specified, attempt to convert that into an NCBI refseq
+        if not feature['refseq'] and feature['isoform']:
+            try:
+                feature['refseq'] = ensembl_txac_to_refseq(feature['isoform'])
+            except NoMatchError as ex:
+                logging.warn(ex)
+                feature['refseq'] = None
+
+        for evidence_item in variant['evidence_items']:
+            # FIXME: maybe we should skip entries where the evidence item was rejected; see evidence_item['status']
+            # example of erroneous submission:
+            # https://civicdb.org/events/genes/5/summary/variants/842/summary/evidence/1941/talk/comments
+            if evidence_item['status'] == 'rejected':
+                logging.warn("Skipping evidence item %s because it has status %s" % (evidence_item['id'], evidence_item['status']))
+                continue
+
+            evidence_url = "https://{}/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(
+                CIVIC_API_URL,
+                variant['gene_id'], variant['id'], evidence_item['id']
+            )
+
+            association = {
+                'variant_name': _extract_name(variant),
+                'description': evidence_item['description'],
+                'environmentalContexts': [
+                    {
+                        'term': drug['name'],
+                        'description': drug['name'],
+                        'id': drug['pubchem_id']
+                    }
+                    for drug in evidence_item['drugs']
+                ],
+                'drug_interaction_type': evidence_item['drug_interaction_type'],
+                'phenotypes': [{
+                    'description': evidence_item['disease']['name'],
+                    'id': evidence_item['disease']['url']
+                }],
+                'evidence': [{
+                    "evidenceType": {
+                        "sourceName": "CIVIC",
+                        "id": '{}'.format(evidence_item['id'])
+                    },
+                    'info': {
+                        'publications': [
+                            evidence_item['source']['source_url']
+                        ]
+                    }
+                }],
+
+                'evidence_type': evidence_item['evidence_type'],
+                'evidence_direction': evidence_item['evidence_direction'],
+                'clinical_significance': evidence_item['clinical_significance'],
+                'evidence_level': evidence_item['evidence_level'],
+
+                'source_link': evidence_url,
+                'publication_url': (evidence_item['source']['source_url'],),
+
+                'drug_labels': u', '.join([drug['name'] for drug in evidence_item['drugs']]) if len(evidence_item['drugs']) > 0 else None
             }
 
-            feature = {
-                'geneSymbol': variant['entrez_name'],
-                'entrez_id': variant['entrez_id'],
-                'start': variant['coordinates']['start'],
-                'end': variant['coordinates']['stop'],
-                'referenceName': unicode_or_none(variant['coordinates']['reference_build']),
-                'refseq': accession(hgvs_types['hgvs_c']),
-                'isoform': unicode_or_none(variant['coordinates']['representative_transcript']),
-                'chromosome': unicode_or_none(variant['coordinates']['chromosome']),
-                'ref': unicode_or_none(variant['coordinates']['reference_bases']),
-                'alt': unicode_or_none(variant['coordinates']['variant_bases']),
-                'name': variant['name'],
-                'description': '{} {}'.format(variant['entrez_name'], variant['name']),
+            # create snapshot of original data
+            v = copy.deepcopy(variant)
+            del v['evidence_items']
+            v['evidence_items'] = [evidence_item]
+
+            variant_url = 'https://{}/events/genes/{}/summary/variants/{}/summary'.format(
+                CIVIC_API_URL,
+                variant['gene_id'], variant['id']
+            )
+
+            feat_assoc = {
+                'genes': [gene_data['gene']],
+                'features': [feature],
+                'feature_names': evidence_item['name'],
+                'association': association,
+                'source': 'civic',
+                'source_url': variant_url,
+                'civic': v
             }
 
-            # also insert the hgvs strings to potentially save work for the normalizers downstream
-            feature.update(hgvs_types)
-
-            # if our feature is lacking information we can infer from the gene metadata, fill that in
-            if not feature['chromosome'] and gene_meta['chromosome']:
-                feature['chromosome'] = gene_meta['chromosome']
-
-            if 'variant_types' in variant and len(variant['variant_types']) > 0:
-                feature['biomarker_type'] = variant['variant_types'][0]['display_name']
-
-            # if the referenceName (aka the assembly) is missing, we might be able to infer it from the ensembl version
-            if feature['referenceName'] is None and variant['coordinates']['ensembl_version'] == 75:
-                feature['referenceName'] = 'GRCh37'
-
-            # if the refseq is still missing but isoform is specified, attempt to convert that into an NCBI refseq
-            if not feature['refseq'] and feature['isoform']:
-                try:
-                    feature['refseq'] = ensembl_txac_to_refseq_ensembldb(feature['isoform'])
-                except NoMatchError as ex:
-                    logging.warn(ex)
-                    feature['refseq'] = None
-
-            for evidence_item in variant['evidence_items']:
-                # FIXME: maybe we should skip entries where the evidence item was rejected; see evidence_item['status']
-                # example of erroneous submission:
-                # https://civicdb.org/events/genes/5/summary/variants/842/summary/evidence/1941/talk/comments
-                if evidence_item['status'] == 'rejected':
-                    logging.warn("Skipping evidence item %s because it has status %s" % (evidence_item['id'], evidence_item['status']))
-                    continue
-
-                evidence_url = "https://{}/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(
-                    CIVIC_API_URL,
-                    variant['gene_id'], variant['id'], evidence_item['id']
-                )
-
-                association = {
-                    'variant_name': _extract_name(variant),
-                    'description': evidence_item['description'],
-                    'environmentalContexts': [
-                        {
-                            'term': drug['name'],
-                            'description': drug['name'],
-                            'id': drug['pubchem_id']
-                        }
-                        for drug in evidence_item['drugs']
-                    ],
-                    'drug_interaction_type': evidence_item['drug_interaction_type'],
-                    'phenotypes': [{
-                        'description': evidence_item['disease']['name'],
-                        'id': evidence_item['disease']['url']
-                    }],
-                    'evidence': [{
-                        "evidenceType": {
-                            "sourceName": "CIVIC",
-                            "id": '{}'.format(evidence_item['id'])
-                        },
-                        'info': {
-                            'publications': [
-                                evidence_item['source']['source_url']
-                            ]
-                        }
-                    }],
-
-                    'evidence_type': evidence_item['evidence_type'],
-                    'evidence_direction': evidence_item['evidence_direction'],
-                    'clinical_significance': evidence_item['clinical_significance'],
-                    'evidence_level': evidence_item['evidence_level'],
-
-                    'source_link': evidence_url,
-                    'publication_url': (evidence_item['source']['source_url'],),
-
-                    'drug_labels': u', '.join([drug['name'] for drug in evidence_item['drugs']]) if len(evidence_item['drugs']) > 0 else None
-                }
-
-                # create snapshot of original data
-                v = copy.deepcopy(variant)
-                del v['evidence_items']
-                v['evidence_items'] = [evidence_item]
-
-                variant_url = 'https://{}/events/genes/{}/summary/variants/{}/summary'.format(
-                    CIVIC_API_URL,
-                    variant['gene_id'], variant['id']
-                )
-
-                feat_assoc = {
-                    'genes': [gene_data['gene']],
-                    'features': [feature],
-                    'feature_names': evidence_item['name'],
-                    'association': association,
-                    'source': 'civic',
-                    'source_url': variant_url,
-                    'civic': v
-                }
-
-                yield feat_assoc
-
-    except Exception as e:
-        logging.exception(gene_data['gene'])
+            yield feat_assoc
 
 
 def harvest_and_convert(genes):
