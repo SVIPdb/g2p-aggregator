@@ -1,4 +1,6 @@
 .env
+/.venv
+/.venv_py3
 **/venv
 .cache
 *.pkl
