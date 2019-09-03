@@ -87,8 +87,14 @@ with open(DATA_FILES['Homo_sapiens.gene_info']['path']) as fp:
     header = fp.readline()[1:].strip().split('\t')
     for line in fp:
         fields = dict(zip(header, line.strip().split('\t')))
-        assert fields['GeneID'] not in clinvar_genes  # ensure we're not overwriting anything
-        clinvar_genes[fields['GeneID']] = fields
+        idx = fields['GeneID']
+        if idx not in clinvar_genes:
+            clinvar_genes[idx] = fields
+        else:
+            if str(clinvar_genes[idx]) != str(fields):
+                # ensure we're not overwriting anything
+                raise Exception("GeneID %s already in clinvar_genes, but other data varies" % fields['GeneID'])
+
 
 
 # FIXME: commented out b/c i'm unsure if we'll need to use the uniprot mapping data later on
