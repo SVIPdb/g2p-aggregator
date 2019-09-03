@@ -428,7 +428,7 @@ class PostgresSilo:
                 'source_id': source_id,
                 'variant_id': last_variant_id,
                 'variant_url': feature_association.get('source_url'),
-                'extras': assoc.get('extras')
+                'extras': jsonify_or_none(assoc.get('extras'))
             },
             key_cols={
                 'source_id': source_id,
@@ -452,7 +452,8 @@ class PostgresSilo:
             'clinical_significance': assoc.get('clinical_significance'),
             'evidence_level': assoc.get('evidence_level'),
 
-            'crawl_status': jsonify_or_none(assoc.get('crawl_status'))
+            'crawl_status': jsonify_or_none(assoc.get('crawl_status')),
+            'extras': jsonify_or_none(assoc.get('extras'))
         }
 
         curs.execute(

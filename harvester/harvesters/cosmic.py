@@ -169,10 +169,10 @@ def convert(gene_data, tq):
             'variant_name': feature['name'],
             'description': 'n/a',  # FIXME: what's a good description for this?
 
-            'extras': json.dumps({
+            'extras': {
                 'fathmm_prediction': sample['FATHMM prediction'],
                 'fathmm_score': sample['FATHMM score'],
-            }),
+            },
 
             # for COSMIC, the tissue in which the sample was found
             'environmentalContexts': [{
