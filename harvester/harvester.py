@@ -249,9 +249,9 @@ def main():
 
     argparser.add_argument('--harvesters',  nargs='+',
                            help='''harvest from these sources. default:
-                                   [cgi_biomarkers,jax,civic,oncokb,cosmic,
+                                   [cgi_biomarkers,jax,civic,oncokb,cosmic,clinvar,
                                    pmkb]''',
-                           default=['cgi_biomarkers', 'jax', 'civic', 'cosmic',
+                           default=['cgi_biomarkers', 'jax', 'civic', 'cosmic', 'clinvar',
                                     'oncokb', 'pmkb', 'brca', 'jax_trials',
                                     'molecularmatch_trials'])
 
