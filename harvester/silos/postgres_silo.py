@@ -255,14 +255,26 @@ class PostgresSilo:
 
             with self._connect() as conn:
                 with conn.cursor() as curs:
-                    curs.execute("delete from api_source where name=%s", (source,))
+                    curs.execute(
+                        """
+                        WITH vis_w_source AS (
+                            select vis.id, src.name as name
+                            from api_variantinsource vis
+                            inner join api_source src on vis.source_id = src.id
+                            where src.name=%s
+                        )
+                        DELETE FROM api_variantinsource B
+                        USING vis_w_source C
+                        WHERE B.id=C.id
+                        """, (source,)
+                    )
                     # after removing the source, and thus variant-in-source entries, remove any orphaned variants
                     # (i.e., variants with no remaining supporting entries...)
                     # FIXME: eventually we'll have SVIP variants that may or may not have entries in external databases.
                     #  we'll either need to represent SVIP as another entry in api_source/api_variantinsource, or
                     #  simply allow variants with no public supporting evidence to continue to exist.
                     curs.execute(
-                        """delete from api_variant
+                        """delete from api_variant v
                         where not exists (select * from api_variantinsource as avs where avs.variant_id=v.id)"""
                     )
                 conn.commit()
