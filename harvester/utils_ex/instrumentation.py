@@ -9,21 +9,37 @@ runtime_stats = defaultdict(int)
 def show_runtime_stats(bar_width=25):
     print "Normalizer runtime stats:"
 
-    if len(runtime_stats) == 0:
+    if len(runtime_stats) > 0:
+        total = sum(runtime_stats.values())
+        highest = max(runtime_stats.values())
+        max_name_width = max(len(x) for x in runtime_stats.keys())
+
+        for name, elapsed in runtime_stats.items():
+            pct = (elapsed / total) * 100.0
+            filled_bars = int(elapsed / total * bar_width)
+            print u"- %*s: %15.3f: %-*s (%.1f%%)" % (
+                max_name_width, name, elapsed, bar_width + 1,
+                (u"\u2593" * filled_bars) + (u"\u2591" * (bar_width - filled_bars)),
+                pct
+            )
+
+    else:
         print "- (no runtime stats collected)"
 
-    total = sum(runtime_stats.values())
-    highest = max(runtime_stats.values())
-    max_name_width = max(len(x) for x in runtime_stats.keys())
+class OpTimeLogger:
+    """
+    Emits how long it took to run once it exits
+    """
+    def __init__(self, name):
+        self.name = name
 
-    for name, elapsed in runtime_stats.items():
-        pct = (elapsed/total) * 100.0
-        filled_bars = int(elapsed/total * bar_width)
-        print u"- %*s: %15.3f: %-*s (%.1f%%)" % (
-            max_name_width, name, elapsed, bar_width+1,
-            (u"\u2593" * filled_bars) + (u"\u2591" * (bar_width - filled_bars)),
-            pct
-        )
+    def __enter__(self):
+        self.start_time = timeit.default_timer()
+        return self
+
+    def __exit__(self, *exc_args):
+        elapsed = max(timeit.default_timer() - self.start_time, 0)
+        logging.info("%s took %.3fs to run" % (self.name, elapsed))
 
 
 class DelayedOpLogger:
@@ -72,7 +88,7 @@ def add_crawl_status(obj, subkey, entry):
     :return:
     """
 
-    if 'crawl_status' not in obj:
+    if 'crawl_status' not in obj or obj['crawl_status'] is None:
         obj['crawl_status'] = defaultdict(list)
 
     obj['crawl_status'][subkey].append(entry)
