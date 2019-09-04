@@ -1,4 +1,6 @@
 #!/usr/bin/python
+import re
+import logging
 
 from pathlib import Path
 import pandas as pd
@@ -26,10 +28,12 @@ LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("../data/cosmic_lookup_table.tsv
 
 def harvest(genes):
     levels = requests.get('http://oncokb.org/api/v1/levels').json()
+    # always get all the gene metadata, since we're going to use this later to reconstruct the variant object's gene key
+    # index it by hugoSymbol, which i've verified to be unique
+    all_genes = {x['hugoSymbol']: x for x in requests.get('http://oncokb.org/api/v1/genes').json()}
 
     if not genes:
-        all_genes = requests.get('http://oncokb.org/api/v1/genes').json()
-        genes = set(gene['hugoSymbol'] for gene in all_genes)
+        genes = set(all_genes.keys())
 
     # get all variants
     print 'Gathering all OncoKB variants'
@@ -51,13 +55,49 @@ def harvest(genes):
     }
     v = v.rename(columns=cols)
     v = v.fillna('')
+
+    # FIXME: the API returns a dict for 'variant' (consisting of mostly redundant info), whereas the file
+    #  oncokb_allActionableVariants.txt simply contains the protein change. ideally we should normalize
+    #  the contents of variant somewhere, since downstream stuff is expecting a dict...
+    # FIXME: i'm also unclear on why we need to issue special requests per variant when we get all the variants
+    #  above, in the call to http://oncokb.org/api/v1/variants...
+
     for idx, row in tqdm(v.iterrows(), total=len(v.index), desc="oncokb clinical lookups"):
         r = requests.get(
             'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
         )
+        matched = False
+
+        # attempt to find a match in the responses for this gene
         for ret in r.json():
             if unicode(ret['name']) == v['variant'][idx]:
                 v.at[idx, 'variant'] = ret
+                matched = True
+
+        if matched is None:
+            # we didn't get a match, so we need to synthesize the structure we'd normally get from oncokb
+            # first, parse the variant's name, then use the gene data from before to populate the gene key
+            m = re.match(r'^(?P<ref>[A-Z]+)(?P<pos>[0-9]+)(_(?P<pos2>[0-9]+))?(?P<alt>[A-Z]+)?$', v['variant'][idx])
+
+            if not m:
+                # we can't do much if anything if we couldn't parse it, so move along
+                continue
+
+            groups = m.groupdict()
+
+            v.at[idx, 'variant'] = {
+                u'variantResidues': groups.get('alt'),  # will be None in the case of a deletion
+                u'proteinStart': groups['pos'],  # 601
+                u'name': v['variant'][idx],  # K601
+                u'proteinEnd': groups.get('pos2', groups['pos']),  # 601
+                u'refResidues': groups['ref'],
+                u'alteration': v['variant'][idx],  # K601
+                # FIXME: should we return a consequence at all?
+                u'consequence': {
+                    u'term': u'NA', u'description': u'NA', u'isGenerallyTruncating': False
+                },
+                u'gene': all_genes[v['gene'][idx]]
+            }
 
 
     # load biological (aka, predisposing) records
@@ -159,6 +199,12 @@ def convert(gene_data):
     # this section yields a feature association for the predictive evidence
     for clinical in oncokb['clinical']:
         variant = clinical['variant']
+
+        # we may not have been able to create a variant structure earlier; if that's the case, variant
+        # will just be a string and there isn't much point in passing it along, so we'll drop it with a warning
+        if type(variant) is not dict:
+            logging.warn("OncoKB convert(): received non-dict variant %s, dropping it" % variant)
+            continue
 
         # if feature is 'Oncogenic Mutations' then merge in biological
         features = []
