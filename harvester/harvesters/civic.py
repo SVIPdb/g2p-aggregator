@@ -101,7 +101,7 @@ def convert(gene_data):
             'ref': unicode_or_none(variant['coordinates']['reference_bases']),
             'alt': unicode_or_none(variant['coordinates']['variant_bases']),
             'name': variant['name'],
-            'description': '{} {}'.format(variant['entrez_name'], variant['name']),
+            'description': u'{} {}'.format(variant['entrez_name'], variant['name']),
         }
 
         # also insert the hgvs strings to potentially save work for the normalizers downstream
