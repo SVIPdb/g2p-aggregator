@@ -118,8 +118,8 @@ def harvest(genes):
     is_valid_record_w_genes = functools.partial(is_valid_record, gene_set=gene_set)
     extractor = itemgetter(1)
 
-    # with open("../data/clinvar/ClinVarVariationRelease_2019-06.xml") as fp:
-    with open("../data/clinvar/clinvar_13961.xml") as fp:
+    # with open("../data/clinvar/clinvar_13961.xml") as fp:
+    with open("../data/clinvar/ClinVarVariationRelease_2019-09.xml") as fp:
         # first, count off the elements so we can make a progress bar
         if NO_PRIOR_RUN:
             total_variants = 0
