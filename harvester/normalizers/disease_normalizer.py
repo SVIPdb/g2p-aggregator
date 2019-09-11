@@ -161,7 +161,7 @@ def print_hierarchy(hierarchy_list, indent=0):
 
 def get_hierarchy_family(_a):
     midpoint = int(len(_a)/2) + 1
-    return _a[min(midpoint, len(_a))]
+    return _a[min(midpoint, len(_a)-1)]
 
 
 def normalize(name):
