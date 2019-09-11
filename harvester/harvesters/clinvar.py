@@ -189,7 +189,18 @@ def convert(root):
 
     grch37_pos = root.xpath('//SimpleAllele/Location/SequenceLocation[@Assembly="GRCh37"]')[0]
 
-    hgvs_g = root.xpath('InterpretedRecord/*/HGVSlist/HGVS[@Assembly="GRCh37" and @Type="genomic, top-level"]/NucleotideExpression/Expression/text()')[0]
+    # FIXME: when running over the full clinvar set, this expression throws an error...maybe because there's no hg19 expression?
+    #  ideally we'd have better error reporting for all these deep, fragile references into the structure.
+    # FIXME: we should also decide what the appropriate behavior is if something critical is missing: do we ignore the
+    #  the variant, or attempt to infer these values from other fields? i'm going with ignore for hgvs_g, but maybe not for _c and _p
+    #  since it could be in a non-coding or inter-gene region, or it could be a variant that involves multiple genes,
+    #  i.e a fusion. hrm...
+    try:
+        hgvs_g = root.xpath('InterpretedRecord/*/HGVSlist/HGVS[@Assembly="GRCh37" and @Type="genomic, top-level"]/NucleotideExpression/Expression/text()')[0]
+    except IndexError:
+        logging.warn("Unable to locate HGVS.g field in variant@ %s (gene %s), skipping..." % (source_url, ", ".join(gene_symbols)))
+        return
+
     # find the hgvs.c representation that uses the NCBI transcript accessions (prefixed by NM_), not LRG
     # (since pyhgvs can't handle projections w/it afaik)
     hgvs_c_first_node = first(root.xpath('InterpretedRecord/*/HGVSlist/HGVS[@Type="coding"]/NucleotideExpression[starts-with(@sequenceAccessionVersion, "NM_")]'))
@@ -228,8 +239,8 @@ def convert(root):
                 'chromosome': grch37_pos.attrib['Chr'],
                 'start': grch37_pos.attrib['start'],
                 'end': grch37_pos.attrib['stop'],
-                'ref': grch37_pos.attrib['referenceAllele'],
-                'alt': grch37_pos.attrib['alternateAllele'],
+                'ref': grch37_pos.attrib.get('referenceAllele', grch37_pos.attrib.get('referenceAlleleVCF')),
+                'alt': grch37_pos.attrib.get('alternateAllele', grch37_pos.attrib.get('alternateAlleleVCF')),
                 'hgvs_g': hgvs_g,
                 'hgvs_c': hgvs_c_first_node.find('Expression').text if hgvs_c_first_node is not None and len(hgvs_c_first_node) else None,
                 'hgvs_p': hgvs_p_first_node.find('Expression').text if hgvs_p_first_node is not None and len(hgvs_p_first_node) else None,
@@ -240,9 +251,6 @@ def convert(root):
             }
         ]
     }
-
-    # for rcv in extract_rcvs(basis, gene_symbols, prot_change, root):
-    #     yield rcv
 
     for rec in extract_rcvs(basis, gene_symbols, prot_change, root):
         yield rec
