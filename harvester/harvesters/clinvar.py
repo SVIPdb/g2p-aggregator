@@ -218,7 +218,7 @@ def convert(root):
         'source_url': source_url,
         # should be the URL of the variant
 
-        'genes': gene_symbols,  # first element required
+        'genes': first(gene_symbols),  # first element required
 
         'features': [
             {
