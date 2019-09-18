@@ -212,13 +212,18 @@ def convert(root):
     # FIXME: consider skipping the entry if we can't get the protein change,
     #  since it's likely intronic or outside the gene
 
+    # FIXME: currently some variants (looking at you, EGFR) have multiple associated genes
+    #  for now i'm going to ignore them, but we'll revisit them later
+    if len(gene_symbols) != 1:
+        return
+
     # each variant will produce multiple assocations for the same set of features
     basis = {
         'source': 'clinvar',
         'source_url': source_url,
         # should be the URL of the variant
 
-        'genes': first(gene_symbols),  # first element required
+        'genes': gene_symbols,  # first element required
 
         'features': [
             {
