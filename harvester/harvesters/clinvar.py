@@ -215,6 +215,7 @@ def convert(root):
     # FIXME: currently some variants (looking at you, EGFR) have multiple associated genes
     #  for now i'm going to ignore them, but we'll revisit them later
     if len(gene_symbols) != 1:
+        logging.warn("Non-singular gene list specified (%s), skipping..." % ", ".join(gene_symbols))
         return
 
     # each variant will produce multiple assocations for the same set of features
