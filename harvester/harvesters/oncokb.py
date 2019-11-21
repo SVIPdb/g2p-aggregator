@@ -43,9 +43,9 @@ def harvest(genes):
     print 'Loading OncoKB clinical TSV'
     # then use it to harvest from oncokb actionable
     v = pd.read_csv(clinv, sep='\t')
-    v = v[v['Gene'].isin(genes)]
+    v = v[v['Hugo Symbol'].isin(genes)]
     cols = {
-        'Gene': 'gene',
+        'Hugo Symbol': 'gene',
         'Alteration': 'variant',
         'Cancer Type': 'cancerType',
         'Level': 'level',
@@ -104,9 +104,9 @@ def harvest(genes):
     print 'Loading OncoKB biological TSV'
     # then use it to harvest from oncokb biologic
     b = pd.read_csv(biov, sep='\t')
-    b = b[b['Gene'].isin(genes)]
+    b = b[b['Hugo Symbol'].isin(genes)]
     cols = {
-        'Gene': 'gene',
+        'Hugo Symbol': 'gene',
         'Alteration': 'variant',
         'Oncogenicity': 'oncogenic',
         'Mutation Effect': 'mutationEffect',
