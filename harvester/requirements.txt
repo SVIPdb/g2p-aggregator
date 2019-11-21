@@ -5,6 +5,7 @@ backports-abc==0.5
 backports.csv==1.0.5
 backports.functools-lru-cache==1.4
 backports.shutil-get-terminal-size==1.0.0
+numpy==1.13.3
 biocommons.seqrepo==0.3.5
 biopython==1.69
 bioutils==0.3.3
@@ -48,7 +49,6 @@ mysqlclient==1.4.2.post1
 nbconvert==5.3.1
 nbformat==4.4.0
 notebook==5.2.2
-numpy==1.13.3
 pandas==0.19.2
 pandocfilters==1.4.2
 param==1.5.1
