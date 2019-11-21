@@ -77,7 +77,12 @@ def convert(gene_data):
 
     # we can get some coarse location info, e.g. the chromosome, from the gene symbol itself
     # we'll retrieve that as a failover in case the civic entry is missing that info
-    gene_meta = get_gene(gene_data['gene'])[0]
+    try:
+        gene_meta = get_gene(gene_data['gene'])[0]
+    except ValueError as ex:
+        # this probably means the gene is missing, which means we can't really do anything...
+        logging.warn(str(ex))
+        return
 
     for variant in variants:
         # parse out hgvs strings from 'hgvs_expression' and assign each to a type
