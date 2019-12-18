@@ -89,7 +89,13 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
     ))
     check_stmt = sql.SQL('select id, ({no_update_needed}) as no_update_needed from {target_tbl} where {key_compare}').format(
         no_update_needed=sql.SQL(' and ').join(map(
-            lambda k: sql.SQL("{} = any({})").format(sql.Literal(append_cols[k]), sql.Identifier(k)),
+            lambda k: (
+                # if it's not a list, checks if the scalar is already in the existing array, or...
+                sql.SQL("{} = any({})").format(sql.Literal(append_cols[k]), sql.Identifier(k))
+                if not isinstance(append_cols[k], list) else
+                # ...checks if the list is a subset of the existing array
+                sql.SQL("{} <@ {}").format(sql.Literal(append_cols[k]), sql.Identifier(k))
+            ),
             append_cols.keys()
         )) if append_cols else sql.Literal(True),  # if we have no append_cols, we never need to update
         target_tbl=sql.Identifier(target_table),
