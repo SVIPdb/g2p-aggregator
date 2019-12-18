@@ -55,6 +55,16 @@ def compose_params(params):
             yield elem
 
 
+def array_to_sql(arr):
+    """
+    Converts an iterable to a postgres array.
+
+    :arr the array to convert
+    :return a SQL string suitable for embedding as a value
+    """
+    return sql.SQL("ARRAY[") + sql.SQL(", ").join(sql.Literal(v) for v in arr) + sql.SQL("]")
+
+
 def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, merge_existing=False):
     """
     Helper method for performing an idempotent insert; it always returns the key of the matched item,
@@ -92,9 +102,9 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             lambda k: (
                 # if it's not a list, checks if the scalar is already in the existing array, or...
                 sql.SQL("{} = any({})").format(sql.Literal(append_cols[k]), sql.Identifier(k))
-                if not isinstance(append_cols[k], list) else
+                if not isinstance(append_cols[k], (list, tuple)) else
                 # ...checks if the list is a subset of the existing array
-                sql.SQL("{} <@ {}").format(sql.Literal(append_cols[k]), sql.Identifier(k))
+                sql.SQL("{} <@ {}").format(array_to_sql(sql.Literal(append_cols[k])), sql.Identifier(k))
             ),
             append_cols.keys()
         )) if append_cols else sql.Literal(True),  # if we have no append_cols, we never need to update
@@ -137,7 +147,9 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
                         sql.SQL("{}=array_distinct({} || '{}')").format(
                             sql.Identifier(x),
                             sql.Identifier(x),
-                            sql.SQL("{") + sql.SQL(append_cols[x]) + sql.SQL("}")
+                            sql.SQL("{") + (sql.SQL(append_cols[x])) + sql.SQL("}")
+                            if not isinstance(append_cols[x], (list, tuple)) else
+                            array_to_sql(append_cols[x])
                         )
                     ),
                     append_cols.keys()
