@@ -188,10 +188,15 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             sql.SQL(', ').join(map(sql.Identifier, params.keys())),
             sql.SQL(', ').join(sql.Placeholder() * len(params))
         )
-        if VERBOSE:
-            logging.info(insert_stmt.as_string(curs))
-        curs.execute(insert_stmt, params.values())
-        entry_id = curs.fetchone()[0]
+
+        try:
+            if VERBOSE:
+                logging.info(insert_stmt.as_string(curs))
+            curs.execute(insert_stmt, params.values())
+            entry_id = curs.fetchone()[0]
+        except psycopg2.IntegrityError as ex:
+            print("Failed to insert into %s; statement: %s" % (target_table, insert_stmt.as_string(curs)))
+            raise ex
 
     return entry_id
 
@@ -305,12 +310,14 @@ class PostgresSilo:
             gene_id = _get_or_insert(curs, "api_gene", {
                 'entrez_id': int(gene['entrez_id']),
                 'ensembl_gene_id': gene['ensembl_gene_id'],
-                'uniprot_ids': gene['uniprot_ids'],
                 'location': gene['location'],
                 'symbol': gene['symbol'],
+            }, append_cols={
+                'sources': feature_association['source'],
+                'uniprot_ids': gene['uniprot_ids'],
                 'aliases': gene['aliases'],
-                'prev_symbols': gene['prev_symbols']
-            }, append_cols={'sources': feature_association['source']})
+                'prev_symbols': gene['prev_symbols'],
+            })
             genes_to_ids[unicode(gene['symbol'])] = gene_id
 
             if VERBOSE:
