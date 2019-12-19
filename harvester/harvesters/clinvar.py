@@ -108,7 +108,17 @@ def is_valid_record(elem, gene_set):
 # --- harvester implementation
 # --------------------------------------------------------------------------------------------------------------
 
+# indicates that we have to compute figuress (i.e.., matching, total variants) in this run, which
+#  is time-consuming if you're debugging the thing. if it's false, it uses harcoded matching/total counts
+#  which will need to be updated manually if you use any other input file than ClinVarVariationRelease_2019-09.xml
+#  or if you change the query (e.g., selecting different genes)
 NO_PRIOR_RUN = True
+
+TARGET_FILE = {
+    'complete': "../data/clinvar/ClinVarVariationRelease_2019-09.xml",
+    'egfr l858r': "../data/clinvar/clinvar_16609.xml",
+    'braf v600e': "../data/clinvar/clinvar_13961.xml",
+}
 
 
 def harvest(genes):
@@ -118,8 +128,7 @@ def harvest(genes):
     is_valid_record_w_genes = functools.partial(is_valid_record, gene_set=gene_set)
     extractor = itemgetter(1)
 
-    # with open("../data/clinvar/clinvar_13961.xml") as fp:
-    with open("../data/clinvar/ClinVarVariationRelease_2019-09.xml") as fp:
+    with open(TARGET_FILE['complete']) as fp:
         # first, count off the elements so we can make a progress bar
         if NO_PRIOR_RUN:
             total_variants = 0
@@ -394,8 +403,6 @@ def harvest_and_convert(genes):
             yield feat_assoc
 
 
-
-# main
 if __name__ == '__main__':
     for feature_association in harvest_and_convert(["MDM2"]):
         logging.info(feature_association)
