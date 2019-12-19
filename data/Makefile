@@ -37,7 +37,7 @@ cosmic_lookup_table.tsv: $(COSMIC_MUTATIONS)
 
 ## produce version of COSMIC sorted by gene, alteration so that we can filter out genes and alterations in linear time
 CosmicMutantExport_sorted.tsv: $(COSMIC_MUTATIONS)
-	( head -n 1 CosmicMutantExport.tsv ; tail -n +2 CosmicMutantExport.tsv | sort -t$'\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
+	gzcat $(COSMIC_MUTATIONS) | ( read -r; printf "%s\n" "$${REPLY}" ; sort --field-separator='\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
 
 ## Create cgi_mut_benchmarking.tsv file.
 cgi_mut_benchmarking.tsv:
