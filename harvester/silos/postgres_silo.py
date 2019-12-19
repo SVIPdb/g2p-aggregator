@@ -84,9 +84,6 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
     if key_cols is None:
         key_cols = params
 
-    # initially we don't know the entry's id, or even if it exists yet
-    entry_id = None
-
     # this checks if there's an existing variant with columns/values specified in key_cols
     # we also check if it already has the sources we'd append via append_cols; if it does, we don't need to update it
     # the complete sql looks something like:
