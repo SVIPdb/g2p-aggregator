@@ -104,7 +104,7 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
                 sql.SQL("{} = any({})").format(sql.Literal(append_cols[k]), sql.Identifier(k))
                 if not isinstance(append_cols[k], (list, tuple)) else
                 # ...checks if the list is a subset of the existing array
-                sql.SQL("{} <@ {}").format(array_to_sql(sql.Literal(append_cols[k])), sql.Identifier(k))
+                sql.SQL("{} <@ {}").format(array_to_sql(append_cols[k]), sql.Identifier(k))
             ),
             append_cols.keys()
         )) if append_cols else sql.Literal(True),  # if we have no append_cols, we never need to update
