@@ -141,7 +141,7 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             append_part = (
                 map(
                     lambda x: (
-                        sql.SQL("{}=array_distinct({} || '{}')").format(
+                        sql.SQL("{}=array_distinct({} || {})").format(
                             sql.Identifier(x),
                             sql.Identifier(x),
                             sql.SQL("{") + (sql.SQL(append_cols[x])) + sql.SQL("}")
