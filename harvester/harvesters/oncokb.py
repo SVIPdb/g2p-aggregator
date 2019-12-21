@@ -300,7 +300,13 @@ def convert(gene_data):
     # this section yields a feature association for the oncogenic evidence
     for biological in oncokb['biological']:
         variant = biological['variant']
-        feature = create_feature(variant)
+
+        try:
+            feature = create_feature(variant)
+        except ValueError as ex:
+            # this probably means the gene is missing, which means we can't really do anything...
+            logging.warn(str(ex))
+            return
 
         association = {
             'variant_name': variant['name'],
