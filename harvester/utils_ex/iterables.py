@@ -1,7 +1,7 @@
 """
 Contains miscellaneous iterable-manipulation methods.
 """
-from itertools import ifilter
+from itertools import ifilter, islice
 
 
 def try_flatten(seq, scalar_classes=(str,)):
@@ -48,3 +48,15 @@ def matched(l, pred):
     #     return None
 
     return next(ifilter(pred, l), None)
+
+
+def grouper_flat(iterable, n):
+    """
+    Yields chunks of size n from the provided iterable.
+    """
+    it = iter(iterable)
+    while True:
+        chunk = tuple(islice(it, n))
+        if not chunk:
+            return
+        yield chunk

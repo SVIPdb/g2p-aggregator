@@ -582,7 +582,7 @@ class PostgresSilo:
                             try:
                                 self._save_one(curs, feature_association)
                             except Exception as ex:
-                                logging.warn("Failed to insert a feature_association, skipping (reason: %s)" % str(ex))
+                                logging.warn("Failed to insert a feature_association, skipping")
                                 continue
 
                     conn.commit()

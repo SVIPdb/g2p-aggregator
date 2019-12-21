@@ -3,6 +3,7 @@ import os
 import sys
 import importlib, pkgutil
 
+from utils_ex.iterables import grouper_flat
 from utils_ex.tqdm_logger import TqdmLoggingHandler
 
 sys.path.append('silos')  # NOQA
@@ -44,6 +45,9 @@ logger.addHandler(TqdmLoggingHandler())
 
 # announce each item that's added
 VERBOSE_ITEMS = False
+
+# if set, splits gene processing into chunks so we don't run out of memory (FIXME: fix the memory issue)
+GENE_CHUNK_SIZE = 10
 
 # we just need to check for membership, so a set is faster than a list
 DUPLICATES = set()
@@ -335,7 +339,11 @@ def main():
 
     for silo in silos:
         if 'all' in args.phases:
-            silo.save_bulk(_check_dup(harvest(args.genes)))
+            if GENE_CHUNK_SIZE:
+                for gene_chunk in grouper_flat(args.genes, GENE_CHUNK_SIZE):
+                    silo.save_bulk(_check_dup(harvest(gene_chunk)))
+            else:
+                silo.save_bulk(_check_dup(harvest(args.genes)))
         else:
             # FIXME: this is really just for debugging...is this necessary
             silo.save_bulk(harvest_only(args.genes))
