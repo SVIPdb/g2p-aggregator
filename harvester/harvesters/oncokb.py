@@ -306,7 +306,7 @@ def convert(gene_data):
         except ValueError as ex:
             # this probably means the gene is missing, which means we can't really do anything...
             logging.warn(str(ex))
-            return
+            continue
 
         association = {
             'variant_name': variant['name'],
