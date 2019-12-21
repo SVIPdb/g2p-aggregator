@@ -315,6 +315,11 @@ class PostgresSilo:
         #    can't be inserted. do we fail cleanly and revert all changes in that case, or do we just try to insert
         #    what we can?
 
+        # pre-step: ensure the feature_association has everything we need
+        if 'gene_identifiers' not in feature_association:
+            logging.warn("Feature association lacks essential key 'gene_identifiers', skipping")
+            return
+
         # --------------------------------------------------------------------------------
         # stage 1. insert genes mentioned in the payload if they don't already exist
         # the result of this will be a genes_to_ids lookup table that we can use to replace text references w/db IDs
