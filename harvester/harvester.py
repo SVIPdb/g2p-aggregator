@@ -204,10 +204,14 @@ def normalize(feature_association):
 
     for normalizer, more in normalizers:
         with DelayedOpLogger(normalizer.__name__) as d:
-            normalizer.normalize_feature_association(feature_association)
-            if more:
-                d.logdelayed(more(d, feature_association))
-
+            try:
+                normalizer.normalize_feature_association(feature_association)
+                if more:
+                    d.logdelayed(more(d, feature_association))
+            except ValueError as ex:
+                # this probably means the gene is missing, which means we can't really do anything...
+                logging.warn(str(ex))
+                continue
 
 # FIXME: _check_dup() does a lot more than just check for duplicates; it injects essential info into each entry
 #  it should probably have its name changed to indicate that it's a more essential part of the pipeline, and
