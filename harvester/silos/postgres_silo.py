@@ -579,7 +579,11 @@ class PostgresSilo:
                         # we may also run harvesters in parallel, in which case we may prefer less contention between
                         # long-running transactions
                         for feature_association in gene_feats:
-                            self._save_one(curs, feature_association)
+                            try:
+                                self._save_one(curs, feature_association)
+                            except Exception as ex:
+                                logging.warn("Failed to insert a feature_association, skipping (reason: %s)" % str(ex))
+                                continue
 
                     conn.commit()
 
