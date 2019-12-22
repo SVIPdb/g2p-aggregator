@@ -589,7 +589,7 @@ class PostgresSilo:
                                 skipped += 1
                                 continue
 
-                    logging.log("Inserted %d entries for gene %s, skipped %d" % (total_inserted, gene, skipped))
+                    logging.info("Inserted %d entries for gene %s, skipped %d" % (total_inserted, gene, skipped))
 
                     conn.commit()
 
