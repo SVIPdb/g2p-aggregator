@@ -217,6 +217,7 @@ def normalize(feature_association):
                 logging.warn(str(ex))
                 continue
 
+
 # FIXME: _check_dup() does a lot more than just check for duplicates; it injects essential info into each entry
 #  it should probably have its name changed to indicate that it's a more essential part of the pipeline, and
 #  the "normalizers" should be renamed to reflect that they also add important annotations/corrections
@@ -341,6 +342,7 @@ def main():
         if 'all' in args.phases:
             if GENE_CHUNK_SIZE:
                 for gene_chunk in grouper_flat(args.genes, GENE_CHUNK_SIZE):
+                    logging.info(" -> Processing gene chunk: %s" % gene_chunk)
                     silo.save_bulk(_check_dup(harvest(gene_chunk)))
             else:
                 silo.save_bulk(_check_dup(harvest(args.genes)))

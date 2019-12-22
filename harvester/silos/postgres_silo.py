@@ -573,17 +573,23 @@ class PostgresSilo:
             for gene, gene_feats in itertools.groupby(source_feats, key=operator.itemgetter('genes')):
                 print("=> Processing gene %s..." % gene)
 
+                total_inserted = 0
+                skipped = 0
+
                 with conn:
                     with conn.cursor() as curs:
                         # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
                         # we may also run harvesters in parallel, in which case we may prefer less contention between
                         # long-running transactions
                         for feature_association in gene_feats:
+                            total_inserted += 1
                             try:
                                 self._save_one(curs, feature_association)
                             except Exception as ex:
-                                logging.warn("Failed to insert a feature_association, skipping")
+                                skipped += 1
                                 continue
+
+                    logging.log("Inserted %d entries for gene %s, skipped %d" % (total_inserted, gene, skipped))
 
                     conn.commit()
 
