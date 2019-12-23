@@ -234,7 +234,7 @@ def convert(gene_data, tq):
 
 def harvest_and_convert(genes):
     gene_counts = _get_gene_counts()
-    sample_count = sum(gene_counts[g] for g in genes) if genes else gene_counts['_total']
+    sample_count = sum(gene_counts[g] for g in genes if g in gene_counts) if genes else gene_counts['_total']
 
     with std_out_err_redirect_tqdm() as orig_stdout:
         with tqdm.tqdm(total=sample_count, desc="harvesting %s" % (genes,), file=orig_stdout, dynamic_ncols=True) as tq:
