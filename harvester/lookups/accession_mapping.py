@@ -239,7 +239,7 @@ def _cached_ensembl_txac_to_refseq(ensembl_ac, use_version=True):
         else:
             # just get the first one
             return _ensembl_txac_cache[ensembl_ac_stable][0]['refseq']
-    except KeyError:
+    except (KeyError, TypeError):
         return None
 
 
