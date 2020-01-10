@@ -53,8 +53,8 @@ GENE_CHUNK_SIZE = 10
 DUPLICATES = set()
 
 # cache responses
-# expire the contents of the cache after 3 hours (which should be long enough for the harvester to run once)
-requests_cache.install_cache('harvester', allowable_codes=(200, 400, 404), expire_after=60*60*3)
+# expire the contents of the cache after 72 hours (which should be long enough for the harvester to run once)
+requests_cache.install_cache('harvester', allowable_codes=(200, 400, 404), expire_after=60*60*72)
 
 # a list of normalizers to annotate each feature association (and optionally defines what to report on the console if
 # they take more time than expected to run)
