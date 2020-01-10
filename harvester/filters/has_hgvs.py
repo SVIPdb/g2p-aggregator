@@ -11,7 +11,7 @@ def filter_feature_association(feature_association):
     try:
         if not feature_association['features'][0]['hgvs_g']:
             return False
-    except KeyError or IndexError:
+    except (KeyError, IndexError):
         return False
 
     return True
