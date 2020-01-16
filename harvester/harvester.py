@@ -212,7 +212,10 @@ def normalize(feature_association):
                 normalizer.normalize_feature_association(feature_association)
                 if more:
                     d.logdelayed(more(d, feature_association))
-            except ValueError as ex:
+            except Exception as ex:
+                # FIXME: this is probably too broad of an exception clause, but almost anything
+                #  can throw an exception in the normalizer...review if we can tighten it up, though.
+                #  also, downstream bits might depend on normalization data, so review that as well.
                 # this probably means the gene is missing, which means we can't really do anything...
                 logging.warn(str(ex))
                 continue
