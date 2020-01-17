@@ -149,9 +149,9 @@ def convert(gene_data):
                 'description': evidence_item['description'],
                 'environmentalContexts': [
                     {
-                        'term': drug['name'],
-                        'description': drug['name'],
-                        'id': drug['pubchem_id']
+                        'term': drug.get('name'),
+                        'description': drug.get('name'),
+                        'id': drug.get('pubchem_id')
                     }
                     for drug in evidence_item['drugs']
                 ],
