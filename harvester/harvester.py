@@ -86,6 +86,13 @@ args = None
 silos = []
 
 
+class NormalizerException(Exception):
+    """
+    Raised when a normalizer fails to complete for any reason.
+    """
+    pass
+
+
 def is_duplicate(feature_association):
     """ return true if already harvested """
     is_dup = False
@@ -212,13 +219,12 @@ def normalize(feature_association):
                 normalizer.normalize_feature_association(feature_association)
                 if more:
                     d.logdelayed(more(d, feature_association))
-            except Exception as ex:
+            except Exception, ex:
                 # FIXME: this is probably too broad of an exception clause, but almost anything
                 #  can throw an exception in the normalizer...review if we can tighten it up, though.
-                #  also, downstream bits might depend on normalization data, so review that as well.
-                # this probably means the gene is missing, which means we can't really do anything...
-                logging.warn(str(ex))
-                continue
+                # fyi, downstream bits *do* depend on normalizers running, so we might need to bail
+                #  on the entire entry if something goes wrong here.
+                raise NormalizerException(), None, sys.exc_info()[2]
 
 
 # FIXME: _check_dup() does a lot more than just check for duplicates; it injects essential info into each entry
@@ -228,30 +234,39 @@ def _check_dup(harvested):
     total_fas = 0
     ignored_fas = 0
     duplicated_fas = 0
+    normalizer_failed_fas = 0
 
     for feature_association in harvested:
-        total_fas += 1
+        try:
+            total_fas += 1
 
-        feature_association['tags'] = []
-        feature_association['dev_tags'] = []
-        normalize(feature_association)
+            feature_association['tags'] = []
+            feature_association['dev_tags'] = []
+            normalize(feature_association)
 
-        # ensure it's not a duplicate
-        if is_duplicate(feature_association):
-            duplicated_fas += 1
+            # ensure it's not a duplicate
+            if is_duplicate(feature_association):
+                duplicated_fas += 1
+                continue
+
+            # ensure it passes all the filters
+            if any(not f.filter_feature_association(feature_association) for f in filters):
+                ignored_fas += 1
+                continue
+
+            yield feature_association
+
+        except NormalizerException as ex:
+            normalizer_failed_fas += 1
+            # logging.warn("Normalizer failed, skipping; reason: %s" % str(ex))
             continue
-
-        # ensure it passes all the filters
-        if any(not f.filter_feature_association(feature_association) for f in filters):
-            ignored_fas += 1
-            continue
-
-        yield feature_association
 
     if ignored_fas > 0:
         logging.info("FAs that failed to pass filters: %d (out of %d)" % (ignored_fas, total_fas))
     if duplicated_fas > 0:
         logging.info("Duplicated FAs ignored: %d (out of %d)" % (duplicated_fas, total_fas))
+    if duplicated_fas > 0:
+        logging.info("Failed normalizer FAs: %d (out of %d)" % (normalizer_failed_fas, total_fas))
 
 
 def main():
