@@ -574,10 +574,10 @@ class PostgresSilo:
                 print("=> Processing gene %s..." % gene)
 
                 total_inserted = 0
-                skipped = 0s
+                skipped = 0
 
                 with conn:
-                    with conn.cursor() as curs:s
+                    with conn.cursor() as curs:
                         # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
                         # we may also run harvesters in parallel, in which case we may prefer less contention between
                         # long-running transactions

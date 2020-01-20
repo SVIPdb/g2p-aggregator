@@ -35,7 +35,7 @@ def test_postgres_array_operations():
                 )
             )
             result = curs.fetchone()[0]
-            assert result == True
+            assert result is True
 
             # another subset operation, this time false
             curs.execute(
@@ -45,7 +45,24 @@ def test_postgres_array_operations():
                 )
             )
             result = curs.fetchone()[0]
-            assert result == False
+            assert result is False
+
+
+def test_postgres_array_merging():
+    silo = _make_silo()
+    from silos.postgres_silo import array_to_sql
+
+    with silo._connect() as conn:
+        with conn.cursor() as curs:
+            # attempt union, then distincts
+            curs.execute(
+                sql.SQL("select array_distinct({} || {})").format(
+                    array_to_sql('[1, 2, 2]'),
+                    array_to_sql('[2, 3, 4]')
+                )
+            )
+            result = curs.fetchone()[0]
+            assert result == [1, 2, 3, 4]
 
 
 def _make_silo():
