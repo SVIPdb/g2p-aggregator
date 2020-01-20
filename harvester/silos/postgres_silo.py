@@ -586,7 +586,7 @@ class PostgresSilo:
                             try:
                                 self._save_one(curs, feature_association)
                             except Exception as ex:
-                                logging.warning("skipped, due to %s" % str(ex), "skipped insert", ex)
+                                logging.warning("skipped, due to %s", str(ex), ex)
                                 skipped += 1
                                 continue
 
