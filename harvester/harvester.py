@@ -301,7 +301,7 @@ def main():
                            default=None)
 
     # if set, splits gene processing into chunks so we don't run out of memory (FIXME: fix the memory issue)
-    argparser.add_argument('--gene_chunk_size',   nargs='+',
+    argparser.add_argument('--gene_chunk_size', type=int,
                            help='size of each chunk of genes to process, no value will disable chunking',
                            default=None)
 
