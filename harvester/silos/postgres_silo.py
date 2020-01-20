@@ -574,10 +574,10 @@ class PostgresSilo:
                 print("=> Processing gene %s..." % gene)
 
                 total_inserted = 0
-                skipped = 0
+                skipped = 0s
 
                 with conn:
-                    with conn.cursor() as curs:
+                    with conn.cursor() as curs:s
                         # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
                         # we may also run harvesters in parallel, in which case we may prefer less contention between
                         # long-running transactions
@@ -586,6 +586,7 @@ class PostgresSilo:
                             try:
                                 self._save_one(curs, feature_association)
                             except Exception as ex:
+                                logging.warning("skipped, due to %s" % str(ex), "skipped insert", ex)
                                 skipped += 1
                                 continue
 
