@@ -144,7 +144,7 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
                         sql.SQL("{}=array_distinct({} || {})").format(
                             sql.Identifier(x),
                             sql.Identifier(x),
-                            sql.SQL("ARRAY[") + (sql.Identifier(append_cols[x])) + sql.SQL("]")
+                            sql.SQL("ARRAY[") + (sql.Literal(append_cols[x])) + sql.SQL("]")
                             if not isinstance(append_cols[x], (list, tuple)) else
                             array_to_sql(append_cols[x])
                         )
