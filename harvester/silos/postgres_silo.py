@@ -139,19 +139,20 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             # we assume our append_cols are arrays values that we're treating as sets (via array_distinct)
             # jsonb_set(a, b, 'null', TRUE) results in a's keys being merged with b's.
             append_part = (
-                map(
-                    lambda x: (
+                [
+                    (
                         sql.SQL("{}=array_distinct({} || {})").format(
-                            sql.Identifier(x),
-                            sql.Identifier(x),
-                            sql.SQL("ARRAY[") + (sql.Literal(append_cols[x])) + sql.SQL("]")
-                            if not isinstance(append_cols[x], (list, tuple)) else
-                            array_to_sql(append_cols[x])
+                            sql.Identifier(k),
+                            sql.Identifier(k),
+                            sql.SQL("ARRAY[") + (sql.Literal(v)) + sql.SQL("]")
+                            if not isinstance(v, (list, tuple)) else
+                            array_to_sql(v)
                         )
-                    ),
-                    append_cols.keys()
-                )
-            ) if append_cols is not None and update_required else []
+                    )
+                    for k, v in append_cols.items()
+                    if v is not None or (isinstance(v, (list, tuple)) and len(v) > 0)
+                ]
+            ) if append_cols is not None and append_cols and update_required else []
 
             # construct the 'merge' part of the query if merge_existing is true
             # FIXME: arrays should probably be extended instead of having their contents replaced
