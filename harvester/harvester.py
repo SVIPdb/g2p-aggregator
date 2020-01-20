@@ -46,9 +46,6 @@ logger.addHandler(TqdmLoggingHandler())
 # announce each item that's added
 VERBOSE_ITEMS = False
 
-# if set, splits gene processing into chunks so we don't run out of memory (FIXME: fix the memory issue)
-GENE_CHUNK_SIZE = 10
-
 # we just need to check for membership, so a set is faster than a list
 DUPLICATES = set()
 
@@ -303,6 +300,11 @@ def main():
                            help='array of hugo ids, no value will harvest all',
                            default=None)
 
+    # if set, splits gene processing into chunks so we don't run out of memory (FIXME: fix the memory issue)
+    argparser.add_argument('--gene_chunk_size',   nargs='+',
+                           help='size of each chunk of genes to process, no value will disable chunking',
+                           default=None)
+
     argparser.add_argument('--phases',   nargs='+',
                            help='array of harvest phases to run '
                                 '[harvest,convert,enrich,all]. default is all',
@@ -358,8 +360,8 @@ def main():
 
     for silo in silos:
         if 'all' in args.phases:
-            if GENE_CHUNK_SIZE:
-                for gene_chunk in grouper_flat(args.genes, GENE_CHUNK_SIZE):
+            if args.gene_chunk_size:
+                for gene_chunk in grouper_flat(args.genes, args.gene_chunk_size):
                     logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
                     silo.save_bulk(_check_dup(harvest(gene_chunk)))
             else:
