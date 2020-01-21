@@ -196,7 +196,12 @@ def convert(root):
     genes = root.xpath('InterpretedRecord/*/GeneList/Gene')
     gene_symbols = [x.attrib['Symbol'] for x in genes]
 
-    grch37_pos = root.xpath('//SimpleAllele/Location/SequenceLocation[@Assembly="GRCh37"]')[0]
+    try:
+        grch37_pos = root.xpath('//SimpleAllele/Location/SequenceLocation[@Assembly="GRCh37"]')[0]
+    except IndexError:
+        # this variant has no GRCh37 values; we can't include it, so we have to skip it
+        logging.warn("ClinVar entry has no GRCh37 SequenceLocation, skipping...")
+        return
 
     # FIXME: when running over the full clinvar set, this expression throws an error...maybe because there's no hg19 expression?
     #  ideally we'd have better error reporting for all these deep, fragile references into the structure.
