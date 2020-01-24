@@ -4,6 +4,8 @@ import itertools
 import json
 import logging
 import operator
+import traceback
+from collections import defaultdict
 
 import psycopg2
 from psycopg2 import sql
@@ -63,6 +65,18 @@ def array_to_sql(arr):
     :return a SQL string suitable for embedding as a value
     """
     return sql.SQL("ARRAY[") + sql.SQL(", ").join(sql.Literal(v) for v in arr) + sql.SQL("]")
+
+
+def ddict2dict(d):
+    """
+    Recursively converts elements of an iterable structure to dict if they're dict-like (e.g., defaultdicts)
+    :param d:
+    :return: the same structure, in which all dict-likes are proper dicts
+    """
+    for k, v in d.items():
+        if isinstance(v, dict):
+            d[k] = ddict2dict(v)
+    return dict(d)
 
 
 def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, merge_existing=False):
@@ -269,7 +283,7 @@ class PostgresSilo:
 
         except Exception as e:
             logging.info("PostgresSilo: delete_all failed: {}".format(e))
-            raise e
+            raise
 
     def delete_source(self, source):
         """ delete source from index """
@@ -555,47 +569,86 @@ class PostgresSilo:
 
         conn = self._connect()
 
+        # start the run, i.e. by creating a HarvestRun instance in the db
         with conn.cursor() as curs:
-            curs.execute("select * from api_source")
-            self.source_to_id = dict((x[1], x[0]) for x in curs.fetchall())
+            curs.execute("insert into public.api_harvestrun (started_on, status) values (now(), 'running') returning id")
+            harvest_id = curs.fetchone()
+            pass
 
-            if len(self.source_to_id) == 0:
-                # FIXME: ideally we should ensure this elsewhere, but for now let's make sure we have some sources
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
+        # once the run's started, we need to ensure we write a state when we exit, no matter how
+        exit_status = 'failure'
+        output = None
+        stats = defaultdict(defaultdict)
 
-                print("Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
+        try:
+            # ensure identifiers exist for our sources
+            with conn.cursor() as curs:
+                curs.execute("select * from api_source")
+                self.source_to_id = dict((x[1], x[0]) for x in curs.fetchall())
 
+                if len(self.source_to_id) == 0:
+                    # FIXME: ideally we should ensure this elsewhere, but for now let's make sure we have some sources
+                    curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
+                    curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
+                    curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
+                    curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
 
-        # split transactions by source (for now)
-        for source, source_feats in itertools.groupby(feature_association_generator, key=operator.itemgetter('source')):
-            print("=> Getting source %s..." % source)
+                    print("Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
 
-            for gene, gene_feats in itertools.groupby(source_feats, key=operator.itemgetter('genes')):
-                print("=> Processing gene %s..." % gene)
+            # split first by source, then by gene, then create a transaction and insert all feat_assocs in that gene
+            for source, source_feats in itertools.groupby(feature_association_generator, key=operator.itemgetter('source')):
+                print("=> Getting source %s..." % source)
 
-                total_inserted = 0
-                skipped = 0
+                for gene, gene_feats in itertools.groupby(source_feats, key=operator.itemgetter('genes')):
+                    print("=> Processing gene %s..." % gene)
 
-                with conn:
-                    with conn.cursor() as curs:
-                        # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
-                        # we may also run harvesters in parallel, in which case we may prefer less contention between
-                        # long-running transactions
-                        for feature_association in gene_feats:
-                            total_inserted += 1
-                            try:
-                                self._save_one(curs, feature_association)
-                            except Exception as ex:
-                                logging.warning("skipped, due to %s" % str(ex))
-                                skipped += 1
-                                continue
+                    total_inserted = 0
+                    skipped = 0
 
-                    logging.info("Inserted %d entries for gene %s, skipped %d" % (total_inserted, gene, skipped))
+                    # each gene insertion occurs in its own transaction
+                    with conn:
+                        with conn.cursor() as curs:
+                            # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
+                            # we may also run harvesters in parallel, in which case we may prefer less contention between
+                            # long-running transactions
+                            for feature_association in gene_feats:
+                                total_inserted += 1
+                                try:
+                                    self._save_one(curs, feature_association, harvest_id)
+                                except Exception as ex:
+                                    logging.warning("skipped, due to %s" % str(ex))
+                                    skipped += 1
+                                    continue
 
-                    conn.commit()
+                        logging.info("Inserted %d entries for gene %s, skipped %d" % (total_inserted, gene, skipped))
+                        stats[gene[0]][source] = {
+                            'inserted': total_inserted,
+                            'skipped': skipped
+                        }
+
+                        conn.commit()
+
+        except Exception:
+            exit_status = 'failure'
+            output = traceback.format_exc()
+            raise
+        else:
+            # write success state here
+            exit_status = 'success'
+        finally:
+            # write out our completion time, final status, etc.
+            with conn.cursor() as curs:
+                print("Updating harvest ID %s to status %s" % (harvest_id, exit_status))
+                curs.execute(
+                    """update public.api_harvestrun set
+                    ended_on=now(),
+                    status=%s,
+                    output=%s,
+                    stats=%s
+                    where id=%s""",
+                    (exit_status, output, json.dumps(stats), harvest_id)
+                )
+            conn.commit()
 
     def save(self, feature_association):
         """ write dict to a series of tables"""
