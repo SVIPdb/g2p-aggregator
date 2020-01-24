@@ -2,19 +2,17 @@
 
 import requests
 import copy
-from lookups import evidence_label as el, evidence_direction as ed
 import logging
 from tqdm import tqdm
 
 from normalizers.gene_enricher import get_gene
 from utils_ex.formatting import unicode_or_none
-
+from utils_ex.iterables import matched
 from lookups.accession_mapping import NoMatchError, ensembl_txac_to_refseq
 
 # CIVIC_API_URL = "civic.genome.wustl.edu"
-from utils_ex.iterables import matched
-
-CIVIC_API_URL = "civicdb.org"
+# CIVIC_API_URL = "civicdb.org"
+CIVIC_API_URL = "civic.nexus.ethz.ch"
 
 
 def harvest(genes):
