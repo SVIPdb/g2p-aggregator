@@ -320,7 +320,13 @@ class PostgresSilo:
         except Exception as e:
             logging.info("PostgresSilo: delete_source failed: {}".format(e))
 
-    def _save_one(self, curs, feature_association):
+    def get_genes(self):
+        with self._connect() as conn:
+            with conn.cursor() as curs:
+                curs.execute("select symbol from api_gene")
+                return (x[0] for x in curs.fetchall())
+
+    def _save_one(self, curs, feature_association, harvest_id=None):
         # caveats:
         # 1) this code should be capable of ensuring that the hierarchy can be built incrementally,
         #    e.g., we should insert a previously unseen gene first, then hook up the variant to that new instance

@@ -292,6 +292,10 @@ def main():
                            help='delete all content for any harvester',
                            default=False, action="store_true")
 
+    argparser.add_argument('--skip_existing_genes', '-skg',
+                           help='''skips reinserting genes that already exist in the silo''',
+                           default=False, action="store_true")
+
     argparser.add_argument('--memoize_harvest', '-mh',
                            help='memoize the harvested data and use that, if available',
                            default=False, action="store_true")
@@ -359,16 +363,26 @@ def main():
             silo.delete_all()
 
     for silo in silos:
+        if args.skip_existing_genes:
+            # if this is the postgres silo, attempt to get the list of genes already in the db
+            # so we can skip harvesting them
+            skip_genes = silo.get_genes()
+
+            # remove these genes from args.genes
+            remaining_genes = (x for x in args.genes if x not in skip_genes)
+        else:
+            remaining_genes = args.genes
+
         if 'all' in args.phases:
             if args.gene_chunk_size:
-                for gene_chunk in grouper_flat(args.genes, args.gene_chunk_size):
+                for gene_chunk in grouper_flat(remaining_genes, args.gene_chunk_size):
                     logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
                     silo.save_bulk(_check_dup(harvest(gene_chunk)))
             else:
-                silo.save_bulk(_check_dup(harvest(args.genes)))
+                silo.save_bulk(_check_dup(harvest(remaining_genes)))
         else:
             # FIXME: this is really just for debugging...is this necessary
-            silo.save_bulk(harvest_only(args.genes))
+            silo.save_bulk(harvest_only(remaining_genes))
 
     # afterward, print some statistics on how long the normalizers are taking
     show_runtime_stats()
