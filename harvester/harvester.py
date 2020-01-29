@@ -32,6 +32,7 @@ import silos.file_silo as file_silo
 from silos.postgres_silo import PostgresSilo
 import silos.postgres_silo as postgres_silo
 
+import requests
 import requests_cache
 import hashlib
 
@@ -51,7 +52,12 @@ DUPLICATES = set()
 
 # cache responses
 # expire the contents of the cache after 72 hours (which should be long enough for the harvester to run once)
-requests_cache.install_cache('harvester', allowable_codes=(200, 400, 404), expire_after=60*60*72)
+requests_cache.install_cache(
+    'harvester', allowable_codes=(200, 400, 404), expire_after=60*60*72,
+    backend_options={
+        'fast_save': True
+    }
+)
 
 # a list of normalizers to annotate each feature association (and optionally defines what to report on the console if
 # they take more time than expected to run)
