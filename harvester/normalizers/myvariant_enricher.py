@@ -38,4 +38,4 @@ def normalize_feature_association(feature_association):
                 feature['mv_info'] = {k: retrieved.get(k) for k in SOURCES}
 
         except Exception as e:
-            logging.exception('mv_enricher: exception {} feature {}'.format(e, feature))
+            logging.exception('mv_enricher: exception {}'.format(e))

@@ -340,7 +340,7 @@ def normalize_feature_association(feature_association):
             feature_association['features'] = normalized_features
 
         except Exception as e:
-            message = 'exception {} feature {} allele {}'.format(e, feature, allele_registry_instance)
+            message = 'exception {}'.format(e)
             logging.exception(message)
             add_crawl_status(feature, __name__, {
                 'message': message
