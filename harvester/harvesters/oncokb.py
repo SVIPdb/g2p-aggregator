@@ -1,6 +1,8 @@
 #!/usr/bin/python
+import os
 import re
 import logging
+import urllib2
 
 from pathlib import Path
 import pandas as pd
@@ -10,7 +12,13 @@ from tqdm import tqdm
 
 from lookups import cosmic_lookup_table
 from normalizers.gene_enricher import get_gene
+from utils_ex.downloading import acquire_files
 from utils_ex.formatting import unicode_or_none
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# -- file definitions, updating
+# ----------------------------------------------------------------------------------------------------------------
 
 # OncoKB harvester now pulls from the below downloadable OncoKB files
 # and supplements with additional variant data pulled from their public
@@ -18,26 +26,55 @@ from utils_ex.formatting import unicode_or_none
 # results and their is no endpoint in the public API that gives the
 # same drug-gene-variant association information as was being
 # pulled from the private API.
-clinv = Path('../data/oncokb_allActionableVariants.txt')
-biov = Path('../data/oncokb_allAnnotatedVariants.txt')
+
+data_paths = acquire_files({
+    'oncokb_allActionableVariants.txt': {
+        'path': '../data/oncokb_allActionableVariants.txt',
+        'url': 'http://oncokb.org/api/v1/utils/allActionableVariants.txt'
+    },
+    'oncokb_allAnnotatedVariants.txt': {
+        'path': '../data/oncokb_allAnnotatedVariants.txt',
+        'url': 'http://oncokb.org/api/v1/utils/allAnnotatedVariants.txt'
+    }
+})
+
+clinv = data_paths['oncokb_allActionableVariants.txt']
+biov = data_paths['oncokb_allAnnotatedVariants.txt']
 
 
 # used to get COSMIC info about genes/alterations
 LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("../data/cosmic_lookup_table.tsv")
 
+# as of dec 2019, oncokb now suggests using an API key
+# NOTE (jan 30, 2020): it seems the v1 api is still accessible without it, so this is just a warning, not a requirement
+ONCOKB_API_KEY = os.environ.get('ONCOKB_API_KEY')
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# -- harvesting
+# ----------------------------------------------------------------------------------------------------------------
 
 def harvest(genes):
-    levels = requests.get('http://oncokb.org/api/v1/levels').json()
+    # create a session to send authorized requests
+    session = requests.Session()
+    if ONCOKB_API_KEY:
+        session.headers.update({
+            'Authorization': 'Bearer %s' % ONCOKB_API_KEY
+        })
+    else:
+        logging.info("ONCOKB_API_KEY not set; currently this is fine, but an API key will eventually be required")
+
+    levels = session.get('http://oncokb.org/api/v1/levels').json()
     # always get all the gene metadata, since we're going to use this later to reconstruct the variant object's gene key
     # index it by hugoSymbol, which i've verified to be unique
-    all_genes = {x['hugoSymbol']: x for x in requests.get('http://oncokb.org/api/v1/genes').json()}
+    all_genes = {x['hugoSymbol']: x for x in session.get('http://oncokb.org/api/v1/genes').json()}
 
     if not genes:
         genes = set(all_genes.keys())
 
     # get all variants
     print 'Gathering all OncoKB variants'
-    variants = requests.get('http://oncokb.org/api/v1/variants').json()
+    variants = session.get('http://oncokb.org/api/v1/variants').json()
 
     # load clinical (aka, predictive) records
     print 'Loading OncoKB clinical TSV'
@@ -63,7 +100,7 @@ def harvest(genes):
     #  above, in the call to http://oncokb.org/api/v1/variants...
 
     for idx, row in tqdm(v.iterrows(), total=len(v.index), desc="oncokb clinical lookups"):
-        r = requests.get(
+        r = session.get(
             'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
         )
         matched = False
@@ -117,7 +154,7 @@ def harvest(genes):
     b = b.fillna('')
     for idx, row in tqdm(b.iterrows(), total=len(b.index), desc="oncokb biological lookups"):
         FLAG = False
-        r = requests.get(
+        r = session.get(
             'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
         )
         for ret in r.json():
@@ -238,7 +275,6 @@ def convert(gene_data):
         if clinical['drugAbstracts'] != '':
             absts = clinical['drugAbstracts'].split('; ')
             for i in range(len(absts)):
-                print absts[i]
                 abstract.append({'text': absts[i], 'link': ''})
                 for bit in abstract[i]['text'].split():
                     if 'http' in bit:

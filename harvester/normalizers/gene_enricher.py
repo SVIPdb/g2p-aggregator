@@ -1,18 +1,12 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-import logging
 import re
 import json
-import tempfile
-import urllib2
 from collections import defaultdict
-
-# for updating data dependencies
 from itertools import chain
 
-import requests
-import gzip
-import shutil
+from utils_ex.downloading import acquire_files
+
 
 # load gene names
 # ftp://ftp.ebi.ac.uk/pub/databases/genenames/new/json/non_alt_loci_set.json
@@ -24,7 +18,7 @@ import shutil
 # -- file updating
 # ----------------------------------------------------------------------------------------------------------------
 
-DATA_FILES = {
+data_paths = acquire_files({
     'non_alt_loci_set.json': {
         'path': '../data/non_alt_loci_set.json',
         'url': 'ftp://ftp.ebi.ac.uk/pub/databases/genenames/new/json/non_alt_loci_set.json',
@@ -35,38 +29,7 @@ DATA_FILES = {
         'url': 'ftp://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz',
         'compressed': True
     }
-}
-
-for name, meta in DATA_FILES.items():
-    # unconditionally overwrite each file, since we're downloading it anyway and might as well
-    # have the latest copy
-    try:
-        if meta['url'].startswith('ftp'):
-            logging.info("Downloading %(url)s via FTP, storing in %(path)s" % meta)
-            r = urllib2.urlopen(meta['url'])
-            content = r.read()
-        else:
-            logging.info("Downloading %(url)s via HTTP, storing in %(path)s" % meta)
-            r = requests.get(meta['url'], allow_redirects=True)
-            content = r.content
-
-        if meta['compressed']:
-            with tempfile.TemporaryFile() as tmp_fp:
-                # use a temporary file to store the compressed content...
-                tmp_fp.write(content)
-                tmp_fp.seek(0)
-                decompressed_fp = gzip.GzipFile(fileobj=tmp_fp, mode='rb')
-
-                # ...then write it out to its final location while decompressing it
-                with open(meta['path'], 'wb') as f_out:
-                    shutil.copyfileobj(decompressed_fp, f_out)
-        else:
-            # just write the file out directly
-            with open(meta['path'], 'wb') as fp:
-                fp.write(content)
-
-    except requests.exceptions.RequestException as e:
-        logging.exception("Couldn't get %s from %s, using cached copy" % (name, meta['url']))
+})
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -77,13 +40,13 @@ GENES = {}
 ALIASES = defaultdict(list)
 
 # trim payload, we only need symbol and ensembl
-with open(DATA_FILES['non_alt_loci_set.json']['path']) as fp:
+with data_paths['non_alt_loci_set.json'].open() as fp:
     data = json.load(fp)
 
 # also grab synonyms from the clinvar dataset
 # we index it by clinvar gene id (aka entrez id) to eliminate collisions
 clinvar_genes = {}
-with open(DATA_FILES['Homo_sapiens.gene_info']['path']) as fp:
+with data_paths['Homo_sapiens.gene_info'].open() as fp:
     header = fp.readline()[1:].strip().split('\t')
     for line in fp:
         fields = dict(zip(header, line.strip().split('\t')))
@@ -94,7 +57,6 @@ with open(DATA_FILES['Homo_sapiens.gene_info']['path']) as fp:
             if str(clinvar_genes[idx]) != str(fields):
                 # ensure we're not overwriting anything
                 raise Exception("GeneID %s already in clinvar_genes, but other data varies" % fields['GeneID'])
-
 
 
 # FIXME: commented out b/c i'm unsure if we'll need to use the uniprot mapping data later on

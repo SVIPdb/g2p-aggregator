@@ -171,8 +171,6 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             else:
                 append_part = []
 
-            print("Append bits:\n", "\n".join("=> " + curs.mogrify(part) for part in append_part) if len(append_part) > 0 else "none")
-
             # construct the 'merge' part of the query if merge_existing is true
             # FIXME: arrays should probably be extended instead of having their contents replaced
             if merge_existing:
