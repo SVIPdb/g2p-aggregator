@@ -74,7 +74,7 @@ normalizers = [
     (oncogenic_normalizer, None),  # functionality for oncogenic_normalizer already mostly in harvesters
     (location_normalizer, None),
     (reference_genome_normalizer, None),
-    (biomarker_normalizer, None),
+    # (biomarker_normalizer, None), # disabled b/c it takes forever and we don't even use/trust it
     (gene_enricher, None),
     (myvariant_enricher, None)
 ]
@@ -162,34 +162,35 @@ def memoized(src, harvester, genes, phases):
 def harvest(genes):
     """ get evidence from all sources """
     for h in args.harvesters:
-        logging.info("=> Initializing harvester: %s" % h)
-        harvester = importlib.import_module("harvesters.%s" % h)
-        if args.delete_source:
-            for silo in silos:
-                if h == 'cgi_biomarkers':
-                    h = 'cgi'
-                silo.delete_source(h)
+        with DelayedOpLogger('harvesters.%s' % h, duration=None):
+            logging.info("=> Initializing harvester: %s" % h)
+            harvester = importlib.import_module("harvesters.%s" % h)
+            if args.delete_source:
+                for silo in silos:
+                    if h == 'cgi_biomarkers':
+                        h = 'cgi'
+                    silo.delete_source(h)
 
-        # if we're testing, we can avoid hitting the remote sources repeatedly if we can be reasonably sure that they
-        # haven't changed. note that this *does not* perform cache validation, so use with caution. you also need to
-        # manually clear the cache (the files in .harvest_cache) if you want to recreate the memoization.
-        if args.memoize_harvest:
-            assoc_source = memoized(harvester.harvest_and_convert(genes),
-                                    harvester=h, genes=args.genes, phases=args.phases)
-        else:
-            assoc_source = harvester.harvest_and_convert(genes)
+            # if we're testing, we can avoid hitting the remote sources repeatedly if we can be reasonably sure that they
+            # haven't changed. note that this *does not* perform cache validation, so use with caution. you also need to
+            # manually clear the cache (the files in .harvest_cache) if you want to recreate the memoization.
+            if args.memoize_harvest:
+                assoc_source = memoized(harvester.harvest_and_convert(genes),
+                                        harvester=h, genes=args.genes, phases=args.phases)
+            else:
+                assoc_source = harvester.harvest_and_convert(genes)
 
-        for feature_association in assoc_source:
-            if VERBOSE_ITEMS:
-                logging.info(
-                    '{} yielded feat for gene {}, {} w/evidence level {}'.format(
-                        harvester.__name__,
-                        feature_association['genes'],
-                        feature_association['feature_names'],
-                        feature_association['association']['evidence_level']
+            for feature_association in assoc_source:
+                if VERBOSE_ITEMS:
+                    logging.info(
+                        '{} yielded feat for gene {}, {} w/evidence level {}'.format(
+                            harvester.__name__,
+                            feature_association['genes'],
+                            feature_association['feature_names'],
+                            feature_association['association']['evidence_level']
+                        )
                     )
-                )
-            yield feature_association
+                yield feature_association
 
 
 def harvest_only(genes):
@@ -379,16 +380,25 @@ def main():
         else:
             remaining_genes = args.genes
 
-        if 'all' in args.phases:
-            if args.gene_chunk_size:
-                for gene_chunk in grouper_flat(remaining_genes, args.gene_chunk_size):
-                    logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
-                    silo.save_bulk(_check_dup(harvest(gene_chunk)))
+        with silo.track_harvest() as (stats, harvest_id):
+            stats['params'] = {
+                'gene_list': args.genes if args.genes else 'all',
+                'sources': args.harvesters,
+                'silos': args.silos,
+                'delete_index': args.delete_index,
+                'gene_chunks': args.gene_chunk_size
+            }
+
+            if 'all' in args.phases:
+                if args.gene_chunk_size:
+                    for gene_chunk in grouper_flat(remaining_genes, args.gene_chunk_size):
+                        logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
+                        silo.save_bulk(_check_dup(harvest(gene_chunk)), harvest_id=harvest_id, stats=stats)
+                else:
+                    silo.save_bulk(_check_dup(harvest(remaining_genes)), harvest_id=harvest_id, stats=stats)
             else:
-                silo.save_bulk(_check_dup(harvest(remaining_genes)))
-        else:
-            # FIXME: this is really just for debugging...is this necessary
-            silo.save_bulk(harvest_only(remaining_genes))
+                # FIXME: this is really just for debugging...is this necessary
+                silo.save_bulk(harvest_only(remaining_genes), harvest_id=harvest_id, stats=stats)
 
     # afterward, print some statistics on how long the normalizers are taking
     show_runtime_stats()

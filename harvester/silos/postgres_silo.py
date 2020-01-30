@@ -6,6 +6,7 @@ import logging
 import operator
 import traceback
 from collections import defaultdict
+from contextlib import contextmanager
 
 import psycopg2
 from psycopg2 import sql
@@ -126,7 +127,7 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
     composed_params = list(compose_params(key_cols.values()))
 
     if VERBOSE:
-        logging.info(check_stmt.as_string(curs))
+        logging.info(curs.mogrify(check_stmt))
         logging.info("(parameters: %s)" % composed_params)
 
     # first check if it exists and get its id if so...
@@ -152,23 +153,25 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             # construct the 'append' part of the update if there are set fields that we need to append to
             # we assume our append_cols are arrays values that we're treating as sets (via array_distinct)
             # jsonb_set(a, b, 'null', TRUE) results in a's keys being merged with b's.
-            append_part = (
-                [
-                    (
-                        sql.SQL("{}=array_distinct({} || {})").format(
-                            sql.Identifier(k),
-                            sql.Identifier(k),
-                            (
-                                sql.SQL("ARRAY[") + (sql.Literal(v)) + sql.SQL("]")
-                                if not isinstance(v, (list, tuple)) else
-                                array_to_sql(v)
-                            )
+
+            if append_cols is not None and append_cols and update_required:
+                append_part = [
+                    sql.SQL("{}=array_distinct({} || {})").format(
+                        sql.Identifier(k),
+                        sql.Identifier(k),
+                        (
+                            sql.SQL("ARRAY[") + (sql.Literal(v)) + sql.SQL("]")
+                            if not isinstance(v, (list, tuple)) else
+                            array_to_sql(v)
                         )
                     )
                     for k, v in append_cols.items()
                     if v is not None and (not isinstance(v, (list, tuple)) or len(v) > 0)
                 ]
-            ) if append_cols is not None and append_cols and update_required else []
+            else:
+                append_part = []
+
+            print("Append bits:\n", "\n".join("=> " + curs.mogrify(part) for part in append_part) if len(append_part) > 0 else "none")
 
             # construct the 'merge' part of the query if merge_existing is true
             # FIXME: arrays should probably be extended instead of having their contents replaced
@@ -198,7 +201,7 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             )
 
             if VERBOSE:
-                logging.info(update_stmt.as_string(curs))
+                logging.info(curs.mogrify(update_stmt))
 
             if merge_existing:
                 # we fill out the merge columns with new values coalesced with the old ones
@@ -213,7 +216,8 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
         # add in the append columns to the params since we're creating this thing now
         if append_cols:
             for col in append_cols:
-                params[col] = '{%s}' % append_cols[col]
+                v = append_cols[col]
+                params[col] = ([v] if not isinstance(v, (list, tuple)) else v)
 
         insert_stmt = sql.SQL('insert into {} ({}) values ({}) returning id').format(
             sql.Identifier(target_table),
@@ -223,11 +227,12 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
 
         try:
             if VERBOSE:
-                logging.info(insert_stmt.as_string(curs))
+                logging.info(curs.mogrify(insert_stmt))
+                logging.info("Params: %s" % params)
             curs.execute(insert_stmt, params.values())
             entry_id = curs.fetchone()[0]
         except psycopg2.IntegrityError as ex:
-            print("Failed to insert into %s; statement: %s" % (target_table, insert_stmt.as_string(curs)))
+            print("Failed to insert into %s; statement: %s" % (target_table, curs.mogrify(insert_stmt)))
             raise ex
 
     return entry_id
@@ -268,6 +273,11 @@ class PostgresSilo:
             # drop everything that we'd be inserting and reset the IDs
             with self._connect() as conn:
                 with conn.cursor() as curs:
+                    # the table svip_curationentry holds references to both curation entries and variants
+                    # since the relation is from svip_curationentry -> variant, we have to clear it first
+                    curs.execute("delete from svip_curationentry")
+
+
                     # if you delete all the genes the cascading delete clears everything in the database,
                     # since everything is keyed to a gene at some point
                     curs.execute("delete from api_gene")
@@ -570,70 +580,95 @@ class PostgresSilo:
                     )
                 )
 
-    def save_bulk(self, feature_association_generator):
-        """ write many feature_associations to the db """
+    def save_bulk(self, feature_association_generator, harvest_id=None, stats=None):
+        """
+        Writes multiple feature associations to the database in a transaction.
+        :param feature_association_generator: the feature_association objects yielded by the harvester(s)
+        :param stats: an optional tracking object managed by this silo's track_harvest context manager
+        :return:
+        """
 
         conn = self._connect()
 
-        # start the run, i.e. by creating a HarvestRun instance in the db
+        # ensure identifiers exist for our sources
         with conn.cursor() as curs:
-            curs.execute("insert into public.api_harvestrun (started_on, status) values (now(), 'running') returning id")
-            harvest_id = curs.fetchone()
-            pass
+            curs.execute("select * from api_source")
+            self.source_to_id = dict((x[1], x[0]) for x in curs.fetchall())
 
-        # once the run's started, we need to ensure we write a state when we exit, no matter how
-        exit_status = 'failure'
-        output = None
-        stats = defaultdict(defaultdict)
+            if len(self.source_to_id) == 0:
+                # FIXME: ideally we should ensure this elsewhere, but for now let's make sure we have some sources
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
 
-        try:
-            # ensure identifiers exist for our sources
-            with conn.cursor() as curs:
-                curs.execute("select * from api_source")
-                self.source_to_id = dict((x[1], x[0]) for x in curs.fetchall())
+                print("Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
 
-                if len(self.source_to_id) == 0:
-                    # FIXME: ideally we should ensure this elsewhere, but for now let's make sure we have some sources
-                    curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
-                    curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
-                    curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
-                    curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
+        # split first by source, then by gene, then create a transaction and insert all feat_assocs in that gene
+        for source, source_feats in itertools.groupby(feature_association_generator, key=operator.itemgetter('source')):
+            print("=> Getting source %s..." % source)
 
-                    print("Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
+            for gene, gene_feats in itertools.groupby(source_feats, key=operator.itemgetter('genes')):
+                print("=> Processing gene %s..." % gene)
 
-            # split first by source, then by gene, then create a transaction and insert all feat_assocs in that gene
-            for source, source_feats in itertools.groupby(feature_association_generator, key=operator.itemgetter('source')):
-                print("=> Getting source %s..." % source)
+                total_inserted = 0
+                skipped = 0
 
-                for gene, gene_feats in itertools.groupby(source_feats, key=operator.itemgetter('genes')):
-                    print("=> Processing gene %s..." % gene)
+                # each gene insertion occurs in its own transaction
+                with conn:
+                    with conn.cursor() as curs:
+                        # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
+                        # we may also run harvesters in parallel, in which case we may prefer less contention between
+                        # long-running transactions
+                        for feature_association in gene_feats:
+                            total_inserted += 1
+                            try:
+                                self._save_one(curs, feature_association, harvest_id)
+                            except Exception as ex:
+                                logging.warning("skipped, due to %s" % str(ex))
+                                skipped += 1
+                                continue
 
-                    total_inserted = 0
-                    skipped = 0
+                    logging.info("Inserted %d entries for gene %s, skipped %d" % (total_inserted, gene, skipped))
 
-                    # each gene insertion occurs in its own transaction
-                    with conn:
-                        with conn.cursor() as curs:
-                            # FIXME: consider chunking into multiple transactions so as not to overload the trans. buffer
-                            # we may also run harvesters in parallel, in which case we may prefer less contention between
-                            # long-running transactions
-                            for feature_association in gene_feats:
-                                total_inserted += 1
-                                try:
-                                    self._save_one(curs, feature_association, harvest_id)
-                                except Exception as ex:
-                                    logging.warning("skipped, due to %s" % str(ex))
-                                    skipped += 1
-                                    continue
-
-                        logging.info("Inserted %d entries for gene %s, skipped %d" % (total_inserted, gene, skipped))
-                        stats[gene[0]][source] = {
+                    if stats is not None:
+                        stats['genes'][gene[0]][source] = {
                             'inserted': total_inserted,
                             'skipped': skipped
                         }
 
-                        conn.commit()
+                    conn.commit()
 
+    def save(self, feature_association):
+        """ write dict to a series of tables"""
+
+        with self._connect() as conn:
+            with conn.cursor() as curs:
+                self._save_one(curs, feature_association)
+            conn.commit()
+
+    @contextmanager
+    def track_harvest(self):
+        conn = self._connect()
+
+        # start the run, i.e. by creating a HarvestRun instance in the db
+        with conn.cursor() as curs:
+            curs.execute(
+                "insert into public.api_harvestrun (started_on, status) values (now(), 'running') returning id")
+            harvest_id = curs.fetchone()
+        conn.commit()
+
+        # once the run's started, we need to ensure we write a state when we exit, no matter how
+        exit_status = 'failure'
+        output = None
+        stats = {
+            'params': None,
+            'genes': defaultdict(defaultdict)
+        }
+
+        try:
+            # yield to allow harvesting to occur, but still trap exceptions
+            yield stats, harvest_id
         except Exception:
             exit_status = 'failure'
             output = traceback.format_exc()
@@ -654,12 +689,4 @@ class PostgresSilo:
                     where id=%s""",
                     (exit_status, output, json.dumps(stats), harvest_id)
                 )
-            conn.commit()
-
-    def save(self, feature_association):
-        """ write dict to a series of tables"""
-
-        with self._connect() as conn:
-            with conn.cursor() as curs:
-                self._save_one(curs, feature_association)
             conn.commit()
