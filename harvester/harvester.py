@@ -9,6 +9,19 @@ from utils_ex.tqdm_logger import TqdmLoggingHandler
 sys.path.append('silos')  # NOQA
 sys.path.append('harvesters')  # NOQA
 
+# ensure request caching happens as soon as possible
+import requests
+import requests_cache
+
+# cache responses
+# expire the contents of the cache after 72 hours (which should be long enough for the harvester to run once)
+requests_cache.install_cache(
+    'harvester', allowable_codes=(200, 400, 404), expire_after=60*60*72,
+    backend_options={
+        'fast_save': True
+    }
+)
+
 import json
 import xxhash
 import argparse
@@ -31,9 +44,6 @@ from silos.file_silo import FileSilo
 import silos.file_silo as file_silo
 from silos.postgres_silo import PostgresSilo
 import silos.postgres_silo as postgres_silo
-
-import requests
-import requests_cache
 import hashlib
 
 # add handler to global logger
@@ -43,21 +53,11 @@ logger.addHandler(TqdmLoggingHandler())
 # # drop into a shell if we raise an uncaught exception
 # sys.excepthook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
 
-
 # announce each item that's added
 VERBOSE_ITEMS = False
 
 # we just need to check for membership, so a set is faster than a list
 DUPLICATES = set()
-
-# cache responses
-# expire the contents of the cache after 72 hours (which should be long enough for the harvester to run once)
-requests_cache.install_cache(
-    'harvester', allowable_codes=(200, 400, 404), expire_after=60*60*72,
-    backend_options={
-        'fast_save': True
-    }
-)
 
 # a list of normalizers to annotate each feature association (and optionally defines what to report on the console if
 # they take more time than expected to run)
