@@ -7,7 +7,7 @@ runtime_stats = defaultdict(int)
 
 
 def show_runtime_stats(bar_width=25):
-    print "Normalizer runtime stats:"
+    print "Runtime stats:"
 
     if len(runtime_stats) > 0:
         total = sum(runtime_stats.values())
@@ -46,6 +46,7 @@ class DelayedOpLogger:
     """
     Emits a log statement if the contained code takes longer than 'duration' seconds.
 
+    If 'duration' is none, no logging statement is emitted.
     If 'aggregate_times' is True, also sums aggregate per-normalizer runtime to the 'runtime_stats' global dict.
     """
     def __init__(self, name, duration=1.0, aggregate_times=True):
@@ -71,7 +72,7 @@ class DelayedOpLogger:
         if self.aggregate_times:
             runtime_stats[self.name] += elapsed
 
-        if elapsed > self.duration:
+        if self.duration and elapsed > self.duration:
             if self.more:
                 logging.info("%s delayed %.3fs; %s" % (self.name, elapsed, " ".join(str(x) for x in self.more)))
             else:
