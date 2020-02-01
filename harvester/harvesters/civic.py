@@ -11,8 +11,8 @@ from utils_ex.iterables import matched
 from lookups.accession_mapping import NoMatchError, ensembl_txac_to_refseq
 
 # CIVIC_API_URL = "civic.genome.wustl.edu"
-# CIVIC_API_URL = "civicdb.org"
-CIVIC_API_URL = "civic.nexus.ethz.ch"
+CIVIC_API_URL = "civicdb.org"
+# CIVIC_API_URL = "civic.nexus.ethz.ch"
 
 
 def harvest(genes):
