@@ -428,12 +428,14 @@ class PostgresSilo:
             }
 
             if 'sequence_ontology' in feat:
-                # in nearly all cases this is included, but there's a civic entry that's missing it for some reason
+                # this struct is opportunistically populated by biomarker_normalizer; if it can't find anything,
+                # it doesn't fill it in at all, even though it still creates the 'sequence_ontology' key.
+                # because of that, all the references below use .get() instead of direct key dereferences.
                 seq_ont = feat['sequence_ontology']
                 var_obj.update({
                     'so_hierarchy': seq_ont.get('hierarchy'),
-                    'soid': seq_ont['soid'],
-                    'so_name': seq_ont['name']
+                    'soid': seq_ont.get('soid'),
+                    'so_name': seq_ont.get('name')
                 })
 
             # FIXME: different data sources have different ways of referencing the same variant, sadly
@@ -623,6 +625,7 @@ class PostgresSilo:
                             try:
                                 self._save_one(curs, feature_association, harvest_id)
                             except Exception as ex:
+                                traceback.print_exc()
                                 logging.warning("skipped, due to %s" % str(ex))
                                 skipped += 1
                                 continue
