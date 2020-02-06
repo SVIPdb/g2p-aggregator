@@ -373,10 +373,14 @@ def main():
         if args.skip_existing_genes:
             # if this is the postgres silo, attempt to get the list of genes already in the db
             # so we can skip harvesting them
-            skip_genes = silo.get_genes()
+            skip_genes = list(silo.get_genes())
+
+            logging.info("Skipping the following already-crawled genes: %s" % skip_genes)
 
             # remove these genes from args.genes
-            remaining_genes = (x for x in args.genes if x not in skip_genes)
+            remaining_genes = list(x for x in args.genes if x not in skip_genes)
+
+            logging.info("Genes remaining to crawl: %s" % remaining_genes)
         else:
             remaining_genes = args.genes
 
