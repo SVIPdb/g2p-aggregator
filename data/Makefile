@@ -2,7 +2,7 @@
 # Note: we want GrCh37 build for now since most databases use this build.
 # https://grch37-cancer.sanger.ac.uk/cosmic/files?data=/files/grch37/cosmic/v81/CosmicMutantExport.tsv.gz
 COSMIC_MUTATIONS=CosmicMutantExport.tsv.gz
-COSMIC_LOOKUPGEN_SCRIPT=../harvester/cosmic_lookup_table.py
+COSMIC_LOOKUPGEN_SCRIPT=../harvester/lookups/cosmic_lookup_table.py
 
 BENCHMARK_DATASET=oncokb
 
@@ -31,13 +31,13 @@ $(COSMIC_MUTATIONS):
 
 ## Create COSMIC lookup table suitable for annotating variants with chrom/start/end/ref/alt
 cosmic_lookup_table.tsv: $(COSMIC_MUTATIONS)
-	gzcat $(COSMIC_MUTATIONS) | tail -n +2 | python ${COSMIC_LOOKUPGEN_SCRIPT} create_table > temp.tsv
+	zcat $(COSMIC_MUTATIONS) | tail -n +2 | python ${COSMIC_LOOKUPGEN_SCRIPT} create_table > temp.tsv
 	(head -n 1 temp.tsv ; tail -n +2 temp.tsv | sort | uniq) > cosmic_lookup_table.tsv
 	rm -f temp.tsv
 
 ## produce version of COSMIC sorted by gene, alteration so that we can filter out genes and alterations in linear time
 CosmicMutantExport_sorted.tsv: $(COSMIC_MUTATIONS)
-	gzcat $(COSMIC_MUTATIONS) | ( read -r; printf "%s\n" "$${REPLY}" ; sort --field-separator='\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
+	zcat $(COSMIC_MUTATIONS) | ( read -r; printf "%s\n" "$${REPLY}" ; sort --field-separator='\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
 
 ## Create cgi_mut_benchmarking.tsv file.
 cgi_mut_benchmarking.tsv:
@@ -57,6 +57,8 @@ benchmark_results.txt: cosmic_lookup_table.tsv $(BENCHMARK_DATASET)_mut_benchmar
 	 	--benchmark-file $(BENCHMARK_DATASET)_mut_benchmarking.tsv > benchmark_results.txt
 
 clean:
-	rm -rf cosmic_lookup_table.tsv cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv benchmark.txt \
-	cgi_biomarkers_$(CGI_VERSION) cgi_biomarkers_per_variant.tsv \
-	oncokb_all_actionable_variants*.tsv
+	rm -rf \
+	  cosmic_lookup_table.tsv CosmicMutantExport_sorted.tsv \
+		cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv benchmark.txt \
+	  cgi_biomarkers_$(CGI_VERSION) cgi_biomarkers_per_variant.tsv \
+	  ncokb_all_actionable_variants*.tsv
