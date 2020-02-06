@@ -419,6 +419,9 @@ class PostgresSilo:
                 'hgvs_c': feat.get('hgvs_c'),
                 'hgvs_p': feat.get('hgvs_p'),
 
+                # somatic status
+                'somatic_status': feat.get('somatic_status'),
+
                 'dbsnp_ids': feat.get('dbsnp_ids'),
                 'myvariant_hg19': feat.get('myvariant_hg19'),
 

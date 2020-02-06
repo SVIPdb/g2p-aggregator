@@ -162,7 +162,9 @@ def convert(gene_data, tq):
             'name': sample['Mutation AA'][2:],
             'description': "%s %s" % (gene_data['gene_symbol'], sample['Mutation AA'][2:]),
             'biomarker_type': sample['Mutation Description'],
-            'strand': sample['Mutation strand']
+            'strand': sample['Mutation strand'],
+
+            'somatic_status': sample['Mutation somatic status']
         }
 
         association = {
@@ -210,8 +212,7 @@ def convert(gene_data, tq):
         }
 
         # FIXME: this should really be named 'variant URL' or somesuch
-        # remove the COSM prefix on the entry's ID when constructing the URL
-        source_url = 'https://cancer.sanger.ac.uk/cosmic/mutation/overview?id=%s' % sample['Mutation ID'][4:],
+        source_url = 'https://cancer.sanger.ac.uk/cosmic/mutation/overview?id=%s' % sample['MUTATION_ID'],
 
         feat_assoc = {
             'genes': [gene_data['gene_symbol']],  # there's only ever one gene/variant
