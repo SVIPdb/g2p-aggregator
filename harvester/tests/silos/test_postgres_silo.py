@@ -65,6 +65,31 @@ def test_postgres_array_merging():
             assert result == [1, 2, 3, 4]
 
 
+def test_postgres_array_string_array_merging():
+    silo = _make_silo()
+    from silos.postgres_silo import array_to_sql
+
+    with silo._connect() as conn:
+        with conn.cursor() as curs:
+            a = u'P95'
+            v = [u'23', u'P95']
+            cmd = (
+                sql.SQL("select array_distinct({} || {})").format(
+                    sql.SQL("ARRAY[") + (sql.Literal(a)) + sql.SQL("]"),
+                    (
+                        sql.SQL("ARRAY[") + (sql.Literal(v)) + sql.SQL("]")
+                        if not isinstance(v, (list, tuple)) else
+                        array_to_sql(v)
+                    )
+                )
+            )
+            print curs.mogrify(cmd)
+
+            curs.execute(cmd)
+            result = curs.fetchone()[0]
+            assert result == ['P95', '23']
+
+
 def _make_silo():
     argparser = argparse.ArgumentParser()
     postgres_silo.populate_args(argparser)
