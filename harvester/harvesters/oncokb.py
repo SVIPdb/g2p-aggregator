@@ -9,6 +9,7 @@ import pandas as pd
 import requests
 
 from tqdm import tqdm
+from retrying import retry
 
 from lookups import cosmic_lookup_table
 from normalizers.gene_enricher import get_gene
@@ -50,6 +51,13 @@ LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("../data/cosmic_lookup_table.tsv
 ONCOKB_API_KEY = os.environ.get('ONCOKB_API_KEY')
 
 
+@retry(wait_exponential_multiplier=1000, wait_exponential_max=10000, stop_max_attempt_number=5)
+def get_oncokb_variant(session, gene, variant):
+    return session.get(
+        'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(gene, variant)
+    )
+
+
 # ----------------------------------------------------------------------------------------------------------------
 # -- harvesting
 # ----------------------------------------------------------------------------------------------------------------
@@ -65,6 +73,7 @@ def harvest(genes):
         logging.info("ONCOKB_API_KEY not set; currently this is fine, but an API key will eventually be required")
 
     levels = session.get('http://oncokb.org/api/v1/levels').json()
+
     # always get all the gene metadata, since we're going to use this later to reconstruct the variant object's gene key
     # index it by hugoSymbol, which i've verified to be unique
     all_genes = {x['hugoSymbol']: x for x in session.get('http://oncokb.org/api/v1/genes').json()}
@@ -78,6 +87,7 @@ def harvest(genes):
 
     # load clinical (aka, predictive) records
     print 'Loading OncoKB clinical TSV'
+
     # then use it to harvest from oncokb actionable
     v = pd.read_csv(clinv, sep='\t')
     v = v[v['Hugo Symbol'].isin(genes)]
@@ -100,9 +110,7 @@ def harvest(genes):
     #  above, in the call to http://oncokb.org/api/v1/variants...
 
     for idx, row in tqdm(v.iterrows(), total=len(v.index), desc="oncokb clinical lookups"):
-        r = session.get(
-            'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
-        )
+        r = get_oncokb_variant(session, row['gene'], row['variant'])
         matched = False
 
         # attempt to find a match in the responses for this gene
@@ -139,6 +147,7 @@ def harvest(genes):
 
     # load biological (aka, predisposing) records
     print 'Loading OncoKB biological TSV'
+
     # then use it to harvest from oncokb biologic
     b = pd.read_csv(biov, sep='\t')
     b = b[b['Hugo Symbol'].isin(genes)]
@@ -152,11 +161,11 @@ def harvest(genes):
     }
     b = b.rename(columns=cols)
     b = b.fillna('')
+
     for idx, row in tqdm(b.iterrows(), total=len(b.index), desc="oncokb biological lookups"):
         FLAG = False
-        r = session.get(
-            'http://oncokb.org/api/v1/variants/lookup?hugoSymbol={}&variant={}'.format(row['gene'], row['variant'])
-        )
+        r = get_oncokb_variant(session, row['gene'], row['variant'])
+
         for ret in r.json():
             # if we find a matching variant in the api, use that instead
             if unicode(ret['name']) == b['variant'][idx]:
@@ -177,13 +186,16 @@ def harvest(genes):
     for gene in genes:
         gene_data = {'gene': gene, 'oncokb': {}}
         gene_data['oncokb']['clinical'] = v[v['gene'].isin([gene])].to_dict(orient='records')
+
         for clinical in gene_data['oncokb']['clinical']:
             key = "LEVEL_{}".format(clinical['level'])
             if key in levels:
                 clinical['level_label'] = levels[key]
             else:
                 print '{} not found'.format(clinical['level'])
+
         gene_data['oncokb']['biological'] = b[b['gene'].isin([gene])].to_dict(orient='records')
+
         yield gene_data
 
 
