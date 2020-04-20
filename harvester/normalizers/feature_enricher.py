@@ -184,6 +184,19 @@ def _is_gene(symbols):
 def enrich(feature, feature_association):
     """
     given a feature, decorate it with genomic location
+
+    Potentially changed fields:
+    - alt
+    - ref
+    - biomarker_type
+    - chromosome
+    - referenceName
+    - description
+    - start
+    - end
+    - name
+    - provenance_rule
+    - provenance
     """
     enriched_features = [feature]
 

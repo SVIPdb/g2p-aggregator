@@ -158,6 +158,8 @@ def _key_na_in_dict(k, o):
 
 
 def normalize(feature):
+    # if we don't have referenceName (aka NCBI refseq id), the chromosome, or the reference sequence,
+    # we can't do anything
     if any(_key_na_in_dict(k, feature) for k in ('referenceName', 'chromosome', 'ref')):
         return None, None
 
