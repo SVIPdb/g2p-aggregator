@@ -30,11 +30,11 @@ from utils_ex.formatting import unicode_or_none
 
 data_paths = acquire_files({
     'oncokb_allActionableVariants.txt': {
-        'path': '../data/oncokb_allActionableVariants.txt',
+        'path': '/data/oncokb_allActionableVariants.txt',
         'url': 'http://oncokb.org/api/v1/utils/allActionableVariants.txt'
     },
     'oncokb_allAnnotatedVariants.txt': {
-        'path': '../data/oncokb_allAnnotatedVariants.txt',
+        'path': '/data/oncokb_allAnnotatedVariants.txt',
         'url': 'http://oncokb.org/api/v1/utils/allAnnotatedVariants.txt'
     }
 })
@@ -44,7 +44,7 @@ biov = data_paths['oncokb_allAnnotatedVariants.txt']
 
 
 # used to get COSMIC info about genes/alterations
-LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("../data/cosmic_lookup_table.tsv")
+LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("/data/cosmic_lookup_table.tsv")
 
 # as of dec 2019, oncokb now suggests using an API key
 # NOTE (jan 30, 2020): it seems the v1 api is still accessible without it, so this is just a warning, not a requirement

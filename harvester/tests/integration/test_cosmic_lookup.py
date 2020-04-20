@@ -6,7 +6,7 @@ sys.path.append('.')  # NOQA
 from harvesters import jax
 from lookups import cosmic_lookup_table
 
-LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("../data/cosmic_lookup_table.tsv")
+LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup("/data/cosmic_lookup_table.tsv")
 
 JAX_FEATURES = [
     'BRAF V600E ',

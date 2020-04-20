@@ -115,9 +115,9 @@ def is_valid_record(elem, gene_set):
 NO_PRIOR_RUN = True
 
 TARGET_FILE = {
-    'complete': "../data/clinvar/ClinVarVariationRelease_2019-09.xml",
-    'egfr l858r': "../data/clinvar/clinvar_16609.xml",
-    'braf v600e': "../data/clinvar/clinvar_13961.xml",
+    'complete': "/data/clinvar/ClinVarVariationRelease_2019-09.xml",
+    'egfr l858r': "/data/clinvar/clinvar_16609.xml",
+    'braf v600e': "/data/clinvar/clinvar_13961.xml",
 }
 
 

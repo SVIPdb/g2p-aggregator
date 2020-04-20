@@ -32,7 +32,7 @@ hgvsparser = hgvs.parser.Parser()
 am = hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh37', normalize=True)
 
 GENE_COUNT_CACHE_FILE = '.harvest_cache/_cached_cosmic_genes.json'
-COSMIC_MUTANTS_SORTED_FILE = '../data/CosmicMutantExport_sorted.tsv'
+COSMIC_MUTANTS_SORTED_FILE = '/data/CosmicMutantExport_sorted.tsv'
 
 
 def parse_cosmic_cds_change(in_cds):

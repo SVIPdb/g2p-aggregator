@@ -20,12 +20,12 @@ from utils_ex.downloading import acquire_files
 
 data_paths = acquire_files({
     'non_alt_loci_set.json': {
-        'path': '../data/non_alt_loci_set.json',
+        'path': '/data/non_alt_loci_set.json',
         'url': 'ftp://ftp.ebi.ac.uk/pub/databases/genenames/new/json/non_alt_loci_set.json',
         'compressed': False
     },
     'Homo_sapiens.gene_info': {
-        'path': '../data/ncbi_gene/Homo_sapiens.gene_info',
+        'path': '/data/ncbi_gene/Homo_sapiens.gene_info',
         'url': 'ftp://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz',
         'compressed': True
     }
@@ -64,7 +64,7 @@ with data_paths['Homo_sapiens.gene_info'].open() as fp:
 
 # # read in uniprot ID mapping reference file so we can annotate the gene info with it
 # csv.field_size_limit(sys.maxsize)
-# uniprot_fp = csv.reader(open('../data/HUMAN_9606_idmapping_selected.tab', 'r'), dialect='excel-tab')
+# uniprot_fp = csv.reader(open('/data/HUMAN_9606_idmapping_selected.tab', 'r'), dialect='excel-tab')
 # uniprot_header = uniprot_fp.next()
 #
 # # maps entrez id to uniprot accession ID, but only for entries w/a PIR column

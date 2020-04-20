@@ -67,7 +67,7 @@ def test_profiles():
             # Look up variant and add position information.
             if not LOOKUP_TABLE:
                 LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                               "../data/cosmic_lookup_table.tsv")
+                               "/data/cosmic_lookup_table.tsv")
             matches = LOOKUP_TABLE.get_entries(gene_index[i], mut_index[i])
             print 'profile >{}< gene_index[i] >{}< mut_index[i] >{}< matches {}'.format(
                                                             profile,

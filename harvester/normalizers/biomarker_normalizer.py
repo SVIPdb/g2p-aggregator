@@ -12,7 +12,7 @@ if not API_KEY:
     raise ValueError('Please set BIOONTOLOGY_API_KEY in environment')
 
 biomarker_alias = {}
-with open('../data/biomarkers.tsv', 'r') as fi:
+with open('/data/biomarkers.tsv', 'r') as fi:
     for line in fi:
         if line.startswith('#'):
             continue

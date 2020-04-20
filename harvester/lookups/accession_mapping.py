@@ -28,7 +28,7 @@ class NoMatchError(RuntimeError):
 
 def ensembl_txac_to_refseq_ucsc():
     # uses UCSS genome browser export file to map ensembl transcript accessions to refseq transcripts
-    with open("../data/ensembl_refseq_slim.tsv") as fp:
+    with open("/data/ensembl_refseq_slim.tsv") as fp:
         eref_reader = csv.DictReader(fp, dialect='excel-tab')
         for row in tqdm.tqdm(eref_reader, desc="parsing ensembl-to-refseq table"):
             if not row['hg19.kgXref.refseq']:
@@ -149,7 +149,7 @@ def ensembl_txac_to_refseq_ensembldb(ensembl_ac, use_version=True, retries=5, st
 
 
 _ensembl_txac_cache = None
-ENSEMBL_TXAC_FILE = "../data/ensembl_txac_to_refseq.tsv"
+ENSEMBL_TXAC_FILE = "/data/ensembl_txac_to_refseq.tsv"
 
 
 # noinspection PyTypeChecker

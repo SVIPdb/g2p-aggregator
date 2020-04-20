@@ -14,7 +14,7 @@ if not API_KEY:
 
 
 disease_alias = {}
-with open('../data/disease_alias.tsv', "r") as f:
+with open('/data/disease_alias.tsv', "r") as f:
     for line in f:
         if line.startswith("#"):
             continue

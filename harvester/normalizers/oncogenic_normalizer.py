@@ -44,7 +44,7 @@ def normalize_cgi_oncogenic(asso, gene_set):
     features = deepcopy(asso['features'])
     if not CGI_TABLE:
         # https://www.cancergenomeinterpreter.org/mutations
-        CGI_TABLE = CGI_Oncogenic('../data/catalog_of_validated_oncogenic_mutations.tsv')
+        CGI_TABLE = CGI_Oncogenic('/data/catalog_of_validated_oncogenic_mutations.tsv')
     tt = asso['cgi']['Primary Tumor type']
     for gene in gene_set:
         for match in CGI_TABLE.get_muts(gene, tt):
@@ -108,7 +108,7 @@ def normalize_oncokb_oncogenic(asso, gene_set):
     # make some edits to new_asso
     ONCOKB_TABLE = None
     if not ONCOKB_TABLE:
-        ONCOKB_TABLE = ONCOKB_Oncogenic('../data/oncokb_all_mutations.tsv')
+        ONCOKB_TABLE = ONCOKB_Oncogenic('/data/oncokb_all_mutations.tsv')
     for gene in gene_set:
         for match in ONCOKB_TABLE.get_muts(gene):
             for feature in new_asso['features']:

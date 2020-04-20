@@ -10,7 +10,7 @@ LOOKUP_TABLE = None
 """ https://www.cancergenomeinterpreter.org/biomarkers """
 
 
-def _get_evidence(gene_ids, path='../data'):
+def _get_evidence(gene_ids, path='/data'):
     """ load tsv, yield object where values_cols are lists """
     df = pandas.read_table(path + '/cgi_biomarkers_per_variant.tsv')
     # change nan to blank string
@@ -113,7 +113,7 @@ def convert(evidence):
     if len(gDNA) != 0 or len(indiv_mut) != 0:
         if not LOOKUP_TABLE:
             LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                "../data/cosmic_lookup_table.tsv")
+                "/data/cosmic_lookup_table.tsv")
         for idx, emut in enumerate(indiv_mut):
             # get genomic locus from COSMIC; if mutation not in COSMIC,
             # get locus info from given gDNA instead

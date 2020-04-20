@@ -25,7 +25,7 @@ def _parse_profile(profile):
     if not LOOKUP_TABLE:
         logging.info('_parse_profile: init LOOKUP_TABLE')
         LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                "../data/cosmic_lookup_table.tsv")
+                "/data/cosmic_lookup_table.tsv")
 
     parts = profile.split()
 
@@ -197,7 +197,7 @@ def convert(jax_evidence):
         if not LOOKUP_TABLE:
             logging.info("convert:init LOOKUP_TABLE")
             LOOKUP_TABLE = cosmic_lookup_table.CosmicLookup(
-                           "../data/cosmic_lookup_table.tsv")
+                           "/data/cosmic_lookup_table.tsv")
         startTime2 = time.time()
         matches = LOOKUP_TABLE.get_entries(gene_index[i], mut_index[i])
         logging.info("Time taken LOOKUP_TABLE {} {} {}".format(gene_index[i], mut_index[i], time.time() - startTime2))

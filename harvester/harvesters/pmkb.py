@@ -5,7 +5,7 @@ from lookups import evidence_label as el, evidence_direction as ed
 
 
 def harvest(genes=None):
-    with open("../data/pmkb_interpretations.json", "r") as ins:
+    with open("/data/pmkb_interpretations.json", "r") as ins:
         for line in ins:
             interpretations = json.loads(line)['interpretations']
             for interpretation in interpretations:
