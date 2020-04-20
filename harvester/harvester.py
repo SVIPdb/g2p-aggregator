@@ -30,8 +30,10 @@ import logging.config
 import yaml
 
 from utils_ex.instrumentation import DelayedOpLogger, show_runtime_stats
-from normalizers import gene_enricher, disease_normalizer, oncogenic_normalizer, reference_genome_normalizer, \
-    biomarker_normalizer, location_normalizer, myvariant_enricher
+from normalizers import (
+    gene_enricher, disease_normalizer, oncogenic_normalizer, reference_genome_normalizer,
+    biomarker_normalizer, location_normalizer, myvariant_enricher, new_location_normalizer
+)
 from filters import has_hgvs
 
 # these silos are added on line 4, but adding them again allows for code navigation
@@ -59,6 +61,8 @@ VERBOSE_ITEMS = False
 # we just need to check for membership, so a set is faster than a list
 DUPLICATES = set()
 
+USE_NEW_NORMALIZER = False
+
 # a list of normalizers to annotate each feature association (and optionally defines what to report on the console if
 # they take more time than expected to run)
 normalizers = [
@@ -72,7 +76,7 @@ normalizers = [
         if 'phenotypes' in feature_association['association']
            and len(feature_association['association']['phenotypes']) > 0 else None),
     (oncogenic_normalizer, None),  # functionality for oncogenic_normalizer already mostly in harvesters
-    (location_normalizer, None),
+    (new_location_normalizer if USE_NEW_NORMALIZER else location_normalizer, None),
     (reference_genome_normalizer, None),
     # (biomarker_normalizer, None), # disabled b/c it takes forever and we don't even use/trust it
     (gene_enricher, None),
