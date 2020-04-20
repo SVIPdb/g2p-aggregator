@@ -39,6 +39,11 @@ cosmic_lookup_table.tsv: $(COSMIC_MUTATIONS)
 CosmicMutantExport_sorted.tsv: $(COSMIC_MUTATIONS)
 	zcat $(COSMIC_MUTATIONS) | ( read -r; printf "%s\n" "$${REPLY}" ; sort --field-separator='\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
 
+## Create lookup tables for proteins
+proteins:
+	mkdir -p ../data/proteins/
+	wget -r -l1 -np -nd "ftp://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/mRNA_Prot/" -P ../data/proteins -A "human.*.protein.faa.gz"
+
 ## Create cgi_mut_benchmarking.tsv file.
 cgi_mut_benchmarking.tsv:
 	grep MUT cgi_biomarkers_20170208.tsv | \
