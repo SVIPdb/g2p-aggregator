@@ -41,8 +41,8 @@ CosmicMutantExport_sorted.tsv: $(COSMIC_MUTATIONS)
 
 ## Create lookup tables for proteins
 proteins:
-	mkdir -p ../data/proteins/
-	wget -r -l1 -np -nd "ftp://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/mRNA_Prot/" -P ../data/proteins -A "human.*.protein.faa.gz"
+	mkdir -p ./proteins/
+	wget -r -l1 -np -nd "ftp://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/mRNA_Prot/" -P ./proteins -A "human.*.protein.faa.gz"
 
 ## Create cgi_mut_benchmarking.tsv file.
 cgi_mut_benchmarking.tsv:
@@ -66,4 +66,4 @@ clean:
 	  cosmic_lookup_table.tsv CosmicMutantExport_sorted.tsv \
 		cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv benchmark.txt \
 	  cgi_biomarkers_$(CGI_VERSION) cgi_biomarkers_per_variant.tsv \
-	  ncokb_all_actionable_variants*.tsv
+	  oncokb_all_actionable_variants*.tsv
