@@ -1,17 +1,18 @@
 # COSMIC Mutation Data; can download from https://grch37-cancer.sanger.ac.uk/cosmic/download
 # Note: we want GrCh37 build for now since most databases use this build.
 # https://grch37-cancer.sanger.ac.uk/cosmic/files?data=/files/grch37/cosmic/v81/CosmicMutantExport.tsv.gz
-COSMIC_MUTATIONS=CosmicMutantExport.tsv.gz
 COSMIC_LOOKUPGEN_SCRIPT=../harvester/lookups/cosmic_lookup_table.py
 
 BENCHMARK_DATASET=oncokb
 
-CGI_VERSION=20170208
+CGI_VERSION=20180117 # previous version: 20170208
 
 all: oncokb_all_actionable_variants.tsv cgi_biomarkers_per_variant.tsv \
 		cosmic_lookup_table.tsv CosmicMutantExport_sorted.tsv \
 		cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv \
-		benchmark_results.txt
+		benchmark_results.txt \
+		genesets/cosmic/census_genes.tsv \
+		pmkb_interpretations.json
 
 ## Do bulk download of OncoKB and set up TSV for ingestion.
 oncokb_all_actionable_variants.tsv:
@@ -26,18 +27,30 @@ cgi_biomarkers_per_variant.tsv:
 	unzip cgi_biomarkers_$(CGI_VERSION).zip
 	cp cgi_biomarkers_$(CGI_VERSION)/cgi_biomarkers_per_variant.tsv .
 
-$(COSMIC_MUTATIONS):
-	echo you will need to register and download https://grch37-cancer.sanger.ac.uk/cosmic/files?data=/files/grch37/cosmic/v81/CosmicMutantExport.tsv.gz
+catalog_of_validated_oncogenic_mutations.tsv:
+	curl -L -o catalog_of_validated_oncogenic_mutations_latest.zip 'https://www.cancergenomeinterpreter.org/data/catalog_of_validated_oncogenic_mutations_latest.zip?ts=20180216'
+	unzip catalog_of_validated_oncogenic_mutations_latest.zip catalog_of_validated_oncogenic_mutations.tsv
+
+## COSMIC requires credentials to download its datafiles; this script will cache those credentials
+## this target runs a script that notifies the user that they must first register for COSMIC, then
+## instructs them on how to create .cosmic_creds, which allows for automated COSMIC downloads
+.cosmic_creds:
+	./get_cosmic_creds.sh
+
+CosmicMutantExport.tsv.gz: .cosmic_creds
+	./get_cosmic_datafile.sh 'https://cancer.sanger.ac.uk/cosmic/file_download/GRCh37/cosmic/v92/CosmicMutantExport.tsv.gz' CosmicMutantExport.tsv.gz
 
 ## Create COSMIC lookup table suitable for annotating variants with chrom/start/end/ref/alt
-cosmic_lookup_table.tsv: $(COSMIC_MUTATIONS)
-	zcat $(COSMIC_MUTATIONS) | tail -n +2 | python ${COSMIC_LOOKUPGEN_SCRIPT} create_table > temp.tsv
+cosmic_lookup_table.tsv: CosmicMutantExport.tsv.gz
+	gunzip -c CosmicMutantExport.tsv.gz | tail -n +2 | python ${COSMIC_LOOKUPGEN_SCRIPT} create_table > temp.tsv
 	(head -n 1 temp.tsv ; tail -n +2 temp.tsv | sort | uniq) > cosmic_lookup_table.tsv
 	rm -f temp.tsv
 
 ## produce version of COSMIC sorted by gene, alteration so that we can filter out genes and alterations in linear time
-CosmicMutantExport_sorted.tsv: $(COSMIC_MUTATIONS)
-	zcat $(COSMIC_MUTATIONS) | ( read -r; printf "%s\n" "$${REPLY}" ; sort --field-separator='\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
+## the command below reads off the first line of the file (i.e., the header), then sorts the remaining lines by their 1st and 19th fields
+CosmicMutantExport_sorted.tsv: CosmicMutantExport.tsv.gz
+	gunzip -k CosmicMutantExport.tsv.gz
+	pv CosmicMutantExport.tsv | ( read -r ; printf "%s\n" "$${REPLY}" ; sort --field-separator='\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
 
 ## Create lookup tables for proteins
 proteins:
@@ -61,9 +74,17 @@ benchmark_results.txt: cosmic_lookup_table.tsv $(BENCHMARK_DATASET)_mut_benchmar
 	 python ${COSMIC_LOOKUPGEN_SCRIPT} benchmark --lookup-file cosmic_lookup_table.tsv \
 	 	--benchmark-file $(BENCHMARK_DATASET)_mut_benchmarking.tsv > benchmark_results.txt
 
+## COSMIC census geneset, used as our canonical cancer gene list during harvesting
+genesets/cosmic/cancer_gene_census.csv: .cosmic_creds
+	./get_cosmic_datafile.sh 'https://cancer.sanger.ac.uk/cosmic/file_download/GRCh37/cosmic/v92/cancer_gene_census.csv' genesets/cosmic/cancer_gene_census.csv
+
+pmkb_interpretations.json:
+	curl -L -O 'https://s3-us-west-2.amazonaws.com/g2p-0.7/unprocessed-files/pmkb_interpretations.json'
+
 clean:
 	rm -rf \
-	  cosmic_lookup_table.tsv CosmicMutantExport_sorted.tsv \
-		cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv benchmark.txt \
+	  cosmic_lookup_table.tsv .cosmic_creds CosmicMutantExport.tsv.gz CosmicMutantExport_sorted.tsv \
+	  cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv benchmark.txt \
 	  cgi_biomarkers_$(CGI_VERSION) cgi_biomarkers_per_variant.tsv \
-	  oncokb_all_actionable_variants*.tsv
+	  oncokb_all_actionable_variants*.tsv \
+	  pmkb_interpretations.json
