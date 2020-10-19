@@ -338,11 +338,7 @@ def main():
                            help='size of each chunk of genes to process, no value will disable chunking',
                            default=None)
 
-    argparser.add_argument('--phases',   nargs='+',
-                           help='array of harvest phases to run '
-                                '[harvest,convert,enrich,all]. default is all',
-                           default=['all'],
-                           choices=['all', 'harvest'])
+    argparser.add_argument("-l", "--log", dest="logLevel", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the logging level")
 
     elastic_silo.populate_args(argparser)
     kafka_silo.populate_args(argparser)
@@ -362,6 +358,10 @@ def main():
     with open(path) as f:
         config = yaml.load(f)
     logging.config.dictConfig(config)
+
+    # override w/command line setting if specified
+    if args.logLevel:
+        logging.basicConfig(level=getattr(logging, args.logLevel))
 
     logging.info("harvesters: %r" % args.harvesters)
     logging.info("silos: %r" % args.silos)
