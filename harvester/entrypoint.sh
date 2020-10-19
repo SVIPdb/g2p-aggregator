@@ -1,5 +1,42 @@
 #!/usr/bin/env bash
 
+HARVESTERS="oncokb civic clinvar cosmic"
+
+# declare profiles here, so we don't have to have 1000 entrypoint scripts
+case "$1" in
+        cosmic)
+            HARVESTERS="oncokb civic clinvar cosmic"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+
+        simple)
+            GENES="RAC1"
+            EXTRA_ARGS="--log=INFO"
+            ;;
+
+        merged)
+            echo "Updating combined geneset from OncoKB and CiVIC"
+            if ../data/genesets/merged/acquire_merged_list.sh; then
+                HARVESTERS="oncokb civic clinvar cosmic"
+                GENES=$( cat "../data/genesets/merged/merged_gene_list_latest.txt" | xargs )
+            else
+                echo "Failed to acquire merged geneset"
+                exit 1
+            fi
+            ;;
+
+        debug)
+            GENES="RAC1"
+            POSTGRES_DB="svip_api_debug"
+            EXTRA_ARGS="--log=INFO"
+            ;;
+
+        *)
+            echo $"Usage: $0 {cosmic|simple|debug}"
+            exit 1
+esac
+
 declare -A SILOS
 SILOS[postgres]="--silos postgres --pg_host ${POSTGRES_HOST} --pg_db ${POSTGRES_DB} --pg_user ${POSTGRES_USER} --pg_pass ${POSTGRES_PASSWORD}"
 SILOS[elastic]="--silos elastic --elastic_search elasticsearch"
@@ -15,10 +52,7 @@ if [[ ${CHOSEN_SILO} == "postgres" ]]; then
     done
 fi
 
-# and do a test harvest, dumping the results to a file
-python harvester.py -d \
+python harvester.py -ds \
   ${SILOS[$CHOSEN_SILO]} \
-  --harvesters oncokb civic cosmic \
-  --genes EGFR BRAF
-  # --harvesters oncokb civic --genes BRAF EGFR # BRCA1 BRCA2 TP53
-  # --harvesters oncokb civic jax --genes BRAF --phases all
+  --harvesters "${HARVESTERS}" --genes "${GENES}" \
+  ${EXTRA_ARGS} "$@"
