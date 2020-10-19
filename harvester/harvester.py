@@ -30,10 +30,6 @@ import logging.config
 import yaml
 
 from utils_ex.instrumentation import DelayedOpLogger, show_runtime_stats
-from normalizers import (
-    gene_enricher, disease_normalizer, oncogenic_normalizer, reference_genome_normalizer,
-    biomarker_normalizer, location_normalizer, myvariant_enricher, new_location_normalizer
-)
 from filters import has_hgvs
 
 # these silos are added on line 4, but adding them again allows for code navigation
@@ -63,13 +59,33 @@ DUPLICATES = set()
 
 USE_NEW_NORMALIZER = False
 
-# a list of normalizers to annotate each feature association (and optionally defines what to report on the console if
+# produces a list of normalizers to annotate each feature association (and optionally defines what to report on the console if
 # they take more time than expected to run)
-normalizers = [
-    # FIXME: drug_normalizer removes drug combination info and destroys the capitalization returned by each source.
-    #  it's currently disabled, but it should eventually be fixed.
-    # (drug_normalizer, lambda dol:
-    #     feature_association['association'].get('environmentalContexts', None)),
+normalizers = None
+
+def get_normalizers():
+    """
+    When first called, imports the normalizer modules and produces a list of normalizers which is then cached. On
+    subsequent calls, the cached list is returned rather than being recreated.
+
+    This delayed importing of normalizers is necessary because the normalizer modules include side effects, like
+    downloading remote files, which need to run after global settings like the logging level have been applied.
+    :return:
+    """
+    global normalizers
+
+    if not normalizers:
+        # these modules have side effects, so they need to be imported on use
+        from normalizers import (
+            gene_enricher, disease_normalizer, oncogenic_normalizer, reference_genome_normalizer,
+            biomarker_normalizer, location_normalizer, myvariant_enricher, new_location_normalizer
+        )
+
+        normalizers = [
+            # FIXME: drug_normalizer removes drug combination info and destroys the capitalization returned by each source.
+            #  it's currently disabled, but it should eventually be fixed.
+            # (drug_normalizer, lambda dol:
+            #     feature_association['association'].get('environmentalContexts', None)),
 
     (disease_normalizer, lambda dol, feature_association:
         feature_association['association']['phenotypes'][0]['description']
@@ -82,6 +98,8 @@ normalizers = [
     (gene_enricher, None),
     (myvariant_enricher, None)
 ]
+
+    return normalizers
 
 # a list of filters applied to feature associations immediately before yielding to the silo; if any filter returns
 # false for that feature association, it's discarded
@@ -221,7 +239,7 @@ def harvest_only(genes):
 def normalize(feature_association):
     """ standard representation of drugs,disease etc. """
 
-    for normalizer, more in normalizers:
+    for normalizer, more in get_normalizers():
         with DelayedOpLogger(normalizer.__name__) as d:
             try:
                 normalizer.normalize_feature_association(feature_association)
