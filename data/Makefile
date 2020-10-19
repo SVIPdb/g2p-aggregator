@@ -74,17 +74,29 @@ benchmark_results.txt: cosmic_lookup_table.tsv $(BENCHMARK_DATASET)_mut_benchmar
 	 python ${COSMIC_LOOKUPGEN_SCRIPT} benchmark --lookup-file cosmic_lookup_table.tsv \
 	 	--benchmark-file $(BENCHMARK_DATASET)_mut_benchmarking.tsv > benchmark_results.txt
 
+## OncoKB requires credentials to access the API; this prompts the user to register,
+## then prompts the user for their API key, which is stored in .oncokb_apikey
+.oncokb_apikey:
+	./get_oncokb_creds.sh
+
 ## COSMIC census geneset, used as our canonical cancer gene list during harvesting
 genesets/cosmic/cancer_gene_census.csv: .cosmic_creds
 	./get_cosmic_datafile.sh 'https://cancer.sanger.ac.uk/cosmic/file_download/GRCh37/cosmic/v92/cancer_gene_census.csv' genesets/cosmic/cancer_gene_census.csv
+
+## Merged geneset, used when we want to retrieve all the genes in OncoKB + CIViC
+genesets/merged/merged_gene_list_latest.txt: .oncokb_apikey
+	cd genesets/merged ; ./acquire_merged_list.sh
 
 pmkb_interpretations.json:
 	curl -L -O 'https://s3-us-west-2.amazonaws.com/g2p-0.7/unprocessed-files/pmkb_interpretations.json'
 
 clean:
 	rm -rf \
-	  cosmic_lookup_table.tsv .cosmic_creds CosmicMutantExport.tsv.gz CosmicMutantExport_sorted.tsv \
+	  .oncokb_apikey .cosmic_creds \
+	  cosmic_lookup_table.tsv CosmicMutantExport.tsv.gz CosmicMutantExport_sorted.tsv \
 	  cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv benchmark.txt \
 	  cgi_biomarkers_$(CGI_VERSION) cgi_biomarkers_per_variant.tsv \
 	  oncokb_all_actionable_variants*.tsv \
-	  pmkb_interpretations.json
+	  pmkb_interpretations.json \
+	  genesets/cosmic/cancer_gene_census.csv \
+	  genesets/merged/merged_gene_list_latest.txt
