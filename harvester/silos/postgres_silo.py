@@ -273,8 +273,13 @@ class PostgresSilo:
                 with conn.cursor() as curs:
                     # the table svip_curationentry holds references to both curation entries and variants
                     # since the relation is from svip_curationentry -> variant, we have to clear it first
+                    curs.execute("delete from svip_variantcuration")
                     curs.execute("delete from svip_curationentry")
 
+                    # for some reason these tables need to be cleared out before variant due to an FK violation
+                    # (which is weird, since the delete in api_variant should cascade into api_variantinsvip, but
+                    # it might be something with django's one-to-one field handling...)
+                    curs.execute("delete from api_variantinsvip")
 
                     # if you delete all the genes the cascading delete clears everything in the database,
                     # since everything is keyed to a gene at some point
@@ -293,7 +298,7 @@ class PostgresSilo:
             logging.info("PostgresSilo: delete_all failed: {}".format(e))
             raise
 
-    def delete_source(self, source):
+    def delete_source(self, source, cleanup_orphans=False):
         """ delete source from index """
         try:
             logging.info("PostgresSilo: clearing records which mention source '%s'..." % source)
@@ -313,15 +318,17 @@ class PostgresSilo:
                         WHERE B.id=C.id
                         """, (source,)
                     )
-                    # after removing the source, and thus variant-in-source entries, remove any orphaned variants
-                    # (i.e., variants with no remaining supporting entries...)
-                    # FIXME: eventually we'll have SVIP variants that may or may not have entries in external databases.
-                    #  we'll either need to represent SVIP as another entry in api_source/api_variantinsource, or
-                    #  simply allow variants with no public supporting evidence to continue to exist.
-                    curs.execute(
-                        """delete from api_variant v
-                        where not exists (select * from api_variantinsource as avs where avs.variant_id=v.id)"""
-                    )
+
+                    if cleanup_orphans:
+                        # after removing the source, and thus variant-in-source entries, remove any orphaned variants
+                        # (i.e., variants with no remaining supporting entries...)
+                        # FIXME: eventually we'll have SVIP variants that may or may not have entries in external databases.
+                        #  we'll either need to represent SVIP as another entry in api_source/api_variantinsource, or
+                        #  simply allow variants with no public supporting evidence to continue to exist.
+                        curs.execute(
+                            """delete from api_variant v
+                            where not exists (select * from api_variantinsource as avs where avs.variant_id=v.id)"""
+                        )
                 conn.commit()
             logging.info("...completed clearing for source {}".format(source))
 
