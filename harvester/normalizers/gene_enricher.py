@@ -26,7 +26,7 @@ data_paths = acquire_files({
     },
     'Homo_sapiens.gene_info': {
         'path': '/data/ncbi_gene/Homo_sapiens.gene_info',
-        'url': 'ftp://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz',
+        'url': 'ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz',
         'compressed': True
     }
 })
