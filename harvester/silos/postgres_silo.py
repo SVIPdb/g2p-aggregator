@@ -80,7 +80,7 @@ def ddict2dict(d):
     return dict(d)
 
 
-def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, merge_existing=False):
+def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, merge_existing=False, write_variants=True):
     """
     Helper method for performing an idempotent insert; it always returns the key of the matched item,
     whether it already existed or had to insert it.
@@ -146,67 +146,72 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             logging.info("result: %s" % str(result))
 
         entry_id = result[0]
-        update_required = not result[1]
 
-        # and if we have append_cols that need to be updated, do so
-        if (append_cols is not None and update_required) or merge_existing:
-            # construct the 'append' part of the update if there are set fields that we need to append to
-            # we assume our append_cols are arrays values that we're treating as sets (via array_distinct)
-            # jsonb_set(a, b, 'null', TRUE) results in a's keys being merged with b's.
+        if write_variants:
+            # only update if we're allowed to write to the variants table
+            update_required = not result[1]
 
-            if append_cols is not None and append_cols and update_required:
-                append_part = [
-                    sql.SQL("{}=array_distinct({} || {})").format(
-                        sql.Identifier(k),
-                        sql.Identifier(k),
-                        (
-                            sql.SQL("ARRAY[") + (sql.Literal(v)) + sql.SQL("]")
-                            if not isinstance(v, (list, tuple)) else
-                            array_to_sql(v)
+            # and if we have append_cols that need to be updated, do so
+            if (append_cols is not None and update_required) or merge_existing:
+                # construct the 'append' part of the update if there are set fields that we need to append to
+                # we assume our append_cols are arrays values that we're treating as sets (via array_distinct)
+                # jsonb_set(a, b, 'null', TRUE) results in a's keys being merged with b's.
+
+                if append_cols is not None and append_cols and update_required:
+                    append_part = [
+                        sql.SQL("{}=array_distinct({} || {})").format(
+                            sql.Identifier(k),
+                            sql.Identifier(k),
+                            (
+                                sql.SQL("ARRAY[") + (sql.Literal(v)) + sql.SQL("]")
+                                if not isinstance(v, (list, tuple)) else
+                                array_to_sql(v)
+                            )
+                        )
+                        for k, v in append_cols.items()
+                        if v is not None and (not isinstance(v, (list, tuple)) or len(v) > 0)
+                    ]
+                else:
+                    append_part = []
+
+                # construct the 'merge' part of the query if merge_existing is true
+                # FIXME: arrays should probably be extended instead of having their contents replaced
+                if merge_existing:
+                    merge_items = [p for p in params.items() if p[0] not in key_cols.keys()]
+                    merge_part = (
+                        map(
+                            lambda x: (
+                                sql.SQL("{}=coalesce({}, {})").format(
+                                    sql.Identifier(x),
+                                    sql.Identifier(x),
+                                    sql.Placeholder()
+                                )
+                            ),
+                            [p[0] for p in merge_items]
                         )
                     )
-                    for k, v in append_cols.items()
-                    if v is not None and (not isinstance(v, (list, tuple)) or len(v) > 0)
-                ]
-            else:
-                append_part = []
+                else:
+                    merge_items = None
+                    merge_part = []
 
-            # construct the 'merge' part of the query if merge_existing is true
-            # FIXME: arrays should probably be extended instead of having their contents replaced
-            if merge_existing:
-                merge_items = [p for p in params.items() if p[0] not in key_cols.keys()]
-                merge_part = (
-                    map(
-                        lambda x: (
-                            sql.SQL("{}=coalesce({}, {})").format(
-                                sql.Identifier(x),
-                                sql.Identifier(x),
-                                sql.Placeholder()
-                            )
-                        ),
-                        [p[0] for p in merge_items]
-                    )
+                # finally perform the update, which may append to sets or merge fields
+                update_stmt = sql.SQL('update {} set {} where id={}').format(
+                    sql.Identifier(target_table),
+                    sql.SQL(',').join(append_part + merge_part),
+                    sql.Literal(entry_id)
                 )
-            else:
-                merge_items = None
-                merge_part = []
 
-            # finally perform the update, which may append to sets or merge fields
-            update_stmt = sql.SQL('update {} set {} where id={}').format(
-                sql.Identifier(target_table),
-                sql.SQL(',').join(append_part + merge_part),
-                sql.Literal(entry_id)
-            )
+                if VERBOSE:
+                    logging.info(curs.mogrify(update_stmt))
 
-            if VERBOSE:
-                logging.info(curs.mogrify(update_stmt))
-
-            if merge_existing:
-                # we fill out the merge columns with new values coalesced with the old ones
-                curs.execute(update_stmt, [p[1] for p in merge_items])
-            else:
-                # we're only appending to columns, in which case the appended items are embedded in the query
-                curs.execute(update_stmt)
+                if merge_existing:
+                    # we fill out the merge columns with new values coalesced with the old ones
+                    curs.execute(update_stmt, [p[1] for p in merge_items])
+                else:
+                    # we're only appending to columns, in which case the appended items are embedded in the query
+                    curs.execute(update_stmt)
+        else:
+            logging.info("Found record, and skipping updating b/c this record comes from a non-updating harvester")
 
     else:
         # ...it doesn't exist, so insert it and get its resulting id
@@ -473,7 +478,8 @@ class PostgresSilo:
                     # FIXME: the above might identify differences in punctuation or case as different variants...
                     # ^ this is in fact the case, e.g. "missense_variant" (oncokb) vs. "Missense Variant" (civic)
                 }, append_cols={'sources': feature_association['source']},
-                merge_existing=True
+                merge_existing=True,
+                write_variants=feature_association['write_variants']
             )
 
             variants_to_ids[feat['name']] = variant_id

@@ -151,18 +151,17 @@ def _make_silos(in_args):
     return instances
 
 
-def memoized(src, harvester, genes, phases):
+def memoized(src, harvester, genes):
     """
     Records the contents of src and saves them to a file. On the next run, returns the results of the file if it exists.
     :param src: the generator from which to acquire samples if they don't already exist
     :param harvester: the name of the harvester, used to identify the cache
     :param genes: whether we were just harvesting or harvesting+converting, also used to identify the cache
-    :param phases: whether we were just harvesting or harvesting+converting, also used to identify the cache
     :return: a generator over either the contents of src (if no cache found) or the contents of the cache
     """
     # the cache key basically encodes the script's arguments as part of the cache's filename, so we can re-acquire if we
     # change the arguments.
-    cache_key = xxhash.xxh32(json.dumps([genes, phases])).hexdigest()
+    cache_key = xxhash.xxh32(json.dumps([genes])).hexdigest()
     cache_path = os.path.join(".harvest_cache", "%s_%s.jsonl" % (cache_key, harvester))
 
     # check if there's something in the cache to use
@@ -180,60 +179,64 @@ def memoized(src, harvester, genes, phases):
                 yield record
 
 
-# cgi, jax, civic, oncokb
 def harvest(genes):
+    # FIXME: defined here temporarily, but will probably get filled in by main() later on
+    PHASES = [
+        {
+            "name": "authoritative",
+            "harvesters": [
+                "cosmic"
+            ],
+            "write_variants": True
+        },
+        {
+            "name": "evidence-only",
+            "harvesters": [
+                # run all the other selected harvesters
+                x for x in args.harvesters if x != "cosmic"
+            ],
+            "write_variants": False
+        },
+    ]
+
     """ get evidence from all sources """
-    for h in args.harvesters:
-        with DelayedOpLogger('harvesters.%s' % h, duration=None):
-            logging.info("=> Initializing harvester: %s" % h)
-            harvester = importlib.import_module("harvesters.%s" % h)
-            if args.delete_source:
-                for silo in silos:
-                    if h == 'cgi_biomarkers':
-                        h = 'cgi'
-                    silo.delete_source(h)
+    for phase in PHASES:
+        logging.info("==> Starting phase '%s'" % phase['name'])
 
-            # if we're testing, we can avoid hitting the remote sources repeatedly if we can be reasonably sure that they
-            # haven't changed. note that this *does not* perform cache validation, so use with caution. you also need to
-            # manually clear the cache (the files in .harvest_cache) if you want to recreate the memoization.
-            if args.memoize_harvest:
-                assoc_source = memoized(harvester.harvest_and_convert(genes),
-                                        harvester=h, genes=args.genes, phases=args.phases)
-            else:
-                assoc_source = harvester.harvest_and_convert(genes)
+        for h in phase['harvesters']:
+            with DelayedOpLogger('harvesters.%s' % h, duration=None):
+                logging.info(" => Initializing harvester: %s" % h)
+                harvester = importlib.import_module("harvesters.%s" % h)
+                if args.delete_source:
+                    for silo in silos:
+                        if h == 'cgi_biomarkers':
+                            h = 'cgi'
+                        silo.delete_source(h)
 
-            for feature_association in assoc_source:
-                if VERBOSE_ITEMS:
-                    logging.info(
-                        '{} yielded feat for gene {}, {} w/evidence level {}'.format(
-                            harvester.__name__,
-                            feature_association['genes'],
-                            feature_association['feature_names'],
-                            feature_association['association']['evidence_level']
+                # if we're testing, we can avoid hitting the remote sources repeatedly if we can be reasonably sure that they
+                # haven't changed. note that this *does not* perform cache validation, so use with caution. you also need to
+                # manually clear the cache (the files in .harvest_cache) if you want to recreate the memoization.
+                if args.memoize_harvest:
+                    assoc_source = memoized(harvester.harvest_and_convert(genes),
+                                            harvester=h, genes=args.genes)
+                else:
+                    assoc_source = harvester.harvest_and_convert(genes)
+
+                for feature_association in assoc_source:
+                    # the silo will write to the general variants table only if this is true
+                    # (e.g., we want authoritative sources to write to it, but other ones to not)
+                    feature_association['write_variants'] = phase.get('write_variants', False)
+
+                    if VERBOSE_ITEMS:
+                        logging.info(
+                            '{} yielded feat for gene {}, {} w/evidence level {}'.format(
+                                harvester.__name__,
+                                feature_association['genes'],
+                                feature_association['feature_names'],
+                                feature_association['association']['evidence_level']
+                            )
                         )
-                    )
-                yield feature_association
-
-
-def harvest_only(genes):
-    """ get evidence from all sources """
-    for h in args.harvesters:
-        harvester = importlib.import_module("harvesters.%s" % h)
-        if args.delete_source:
-            for silo in silos:
-                if h == 'cgi_biomarkers':
-                    h = 'cgi'
-                silo.delete_source(h)
-
-        # see the notes in harvest() above
-        if args.memoize_harvest:
-            assoc_source = memoized(harvester.harvest(genes),
-                                    harvester=h, genes=args.genes, phases=args.phases)
-        else:
-            assoc_source = harvester.harvest(genes)
-
-        for evidence in assoc_source:
-            yield {'source': h, h: evidence}
+                    yield feature_association
 
 
 def normalize(feature_association):
@@ -378,7 +381,6 @@ def main():
         logging.info("file_output_dir: %r" % args.file_output_dir)
 
     logging.info("delete_index: %r" % args.delete_index)
-    logging.info("phases: %r" % args.phases)
 
     silos = _make_silos(args)
 
@@ -415,16 +417,12 @@ def main():
                 'gene_chunks': args.gene_chunk_size
             }
 
-            if 'all' in args.phases:
-                if args.gene_chunk_size:
-                    for gene_chunk in grouper_flat(remaining_genes, args.gene_chunk_size):
-                        logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
-                        silo.save_bulk(_check_dup(harvest(gene_chunk)), harvest_id=harvest_id, stats=stats)
-                else:
-                    silo.save_bulk(_check_dup(harvest(remaining_genes)), harvest_id=harvest_id, stats=stats)
+            if args.gene_chunk_size:
+                for gene_chunk in grouper_flat(remaining_genes, args.gene_chunk_size):
+                    logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
+                    silo.save_bulk(_check_dup(harvest(gene_chunk)), harvest_id=harvest_id, stats=stats)
             else:
-                # FIXME: this is really just for debugging...is this necessary
-                silo.save_bulk(harvest_only(remaining_genes), harvest_id=harvest_id, stats=stats)
+                silo.save_bulk(_check_dup(harvest(remaining_genes)), harvest_id=harvest_id, stats=stats)
 
     # afterward, print some statistics on how long the normalizers are taking
     show_runtime_stats()
