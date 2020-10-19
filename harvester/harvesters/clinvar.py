@@ -1,5 +1,7 @@
 #!/usr/bin/python
 import functools
+import json
+import os
 from itertools import ifilter
 from operator import itemgetter
 
@@ -108,17 +110,11 @@ def is_valid_record(elem, gene_set):
 # --- harvester implementation
 # --------------------------------------------------------------------------------------------------------------
 
-# indicates that we have to compute figuress (i.e.., matching, total variants) in this run, which
-#  is time-consuming if you're debugging the thing. if it's false, it uses harcoded matching/total counts
-#  which will need to be updated manually if you use any other input file than ClinVarVariationRelease_2019-09.xml
-#  or if you change the query (e.g., selecting different genes)
-NO_PRIOR_RUN = True
+# if true, uses the cached variant counts if available
+USE_COUNTS_CACHE = True
 
-TARGET_FILE = {
-    'complete': "/data/clinvar/ClinVarVariationRelease_2019-09.xml",
-    'egfr l858r': "/data/clinvar/clinvar_16609.xml",
-    'braf v600e': "/data/clinvar/clinvar_13961.xml",
-}
+# the XML file to use for clinvar data, retrieved by ../data/clinvar/get_clinvar_latest.sh
+CLINVAR_XML_FILE = "/data/clinvar/ClinVarVariationRelease_00-latest.xml"
 
 
 def harvest(genes):
@@ -126,11 +122,27 @@ def harvest(genes):
     gene_set = set(genes) if genes else None
 
     is_valid_record_w_genes = functools.partial(is_valid_record, gene_set=gene_set)
-    extractor = itemgetter(1)
 
-    with open(TARGET_FILE['complete']) as fp:
-        # first, count off the elements so we can make a progress bar
-        if NO_PRIOR_RUN:
+    with open(CLINVAR_XML_FILE) as fp:
+        cache_file_path = os.path.join(os.path.dirname(CLINVAR_XML_FILE), ".var_counts_cache.json")
+
+        # verify that the cache is valid, i.e. it refers to the correct file, gene set, etc.
+        cache_valid = False
+        if  os.path.exists(cache_file_path):
+            with open(cache_file_path, "r") as cache_fp:
+                cached_figures = json.load(cache_fp)
+
+                cache_valid = (
+                    all(k in cached_figures for k in ('filename', 'gene_set', 'total_variants', 'matching_variants',)) and
+                    cached_figures['filename'] == CLINVAR_XML_FILE and
+                    set(cached_figures['gene_set']) == set(gene_set)
+                )
+
+        if cache_valid and USE_COUNTS_CACHE:
+            total_variants = cached_figures['total_variants']
+            matching_variants = cached_figures['matching_variants']
+        else:
+            # first, count off the elements so we can make a progress bar
             total_variants = 0
             matching_variants = 0
 
@@ -143,10 +155,17 @@ def harvest(genes):
                     if is_valid_record_w_genes(elem):
                         matching_variants += 1
 
+            # write the results to the cache, too
+            with open(cache_file_path, "w") as cache_fp:
+                json.dump({
+                    "filename": CLINVAR_XML_FILE,
+                    "gene_set": gene_set,
+                    "total_variants": total_variants,
+                    "matching_variants": matching_variants
+                }, cache_fp)
+
             # and reset the file pointer so we can re-read it all
             fp.seek(0)
-        else:
-            matching_variants, total_variants = 395, 510825
 
         print("Matching vs. total variants: %d/%d" % (matching_variants, total_variants))
 
