@@ -30,6 +30,8 @@ def acquire_files(data_files):
     result = {}
 
     for name, meta in data_files.items():
+        logging.info("Acquiring entry %s from %s..." % (name, meta['url']))
+
         # unconditionally overwrite each file, since we're downloading it anyway and might as well
         # have the latest copy
         try:
