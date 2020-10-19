@@ -87,17 +87,17 @@ def get_normalizers():
             # (drug_normalizer, lambda dol:
             #     feature_association['association'].get('environmentalContexts', None)),
 
-    (disease_normalizer, lambda dol, feature_association:
-        feature_association['association']['phenotypes'][0]['description']
-        if 'phenotypes' in feature_association['association']
-           and len(feature_association['association']['phenotypes']) > 0 else None),
-    (oncogenic_normalizer, None),  # functionality for oncogenic_normalizer already mostly in harvesters
-    (new_location_normalizer if USE_NEW_NORMALIZER else location_normalizer, None),
-    (reference_genome_normalizer, None),
-    # (biomarker_normalizer, None), # disabled b/c it takes forever and we don't even use/trust it
-    (gene_enricher, None),
-    (myvariant_enricher, None)
-]
+            (disease_normalizer, lambda dol, feature_association:
+            feature_association['association']['phenotypes'][0]['description']
+            if 'phenotypes' in feature_association['association']
+               and len(feature_association['association']['phenotypes']) > 0 else None),
+            (oncogenic_normalizer, None),  # functionality for oncogenic_normalizer already mostly in harvesters
+            (new_location_normalizer if USE_NEW_NORMALIZER else location_normalizer, None),
+            (reference_genome_normalizer, None),
+            # (biomarker_normalizer, None), # disabled b/c it takes forever and we don't even use/trust it
+            (gene_enricher, None),
+            (myvariant_enricher, None)
+        ]
 
     return normalizers
 
