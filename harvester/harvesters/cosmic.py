@@ -89,6 +89,8 @@ def harvest(genes=None, conn=None):
     if not conn:
         conn = sqlite3.connect(COSMIC_MUTANTS_DB_FILE)
 
+    conn.row_factory = sqlite3.Row
+
     cursor = conn.cursor()
 
     if genes:
@@ -103,7 +105,7 @@ def harvest(genes=None, conn=None):
         if not cur_gene or sample['Gene name'] != cur_gene:
             refseq_ac = ensembl_txac_to_refseq(sample['Accession Number'])
 
-        yield sample, refseq_ac
+        yield dict(sample), refseq_ac
 
 
 # noinspection PyTypeChecker
@@ -239,7 +241,7 @@ def harvest_and_convert(genes):
 
     with std_out_err_redirect_tqdm() as orig_stdout:
         with tqdm.tqdm(total=sample_count, desc="harvesting %s" % (genes,), file=orig_stdout, dynamic_ncols=True) as tq:
-            for sample, refseq_ac in harvest(genes):
+            for sample, refseq_ac in harvest(genes, conn=conn):
                 feat_assoc = convert(sample, refseq_ac, tq=tq)
                 if feat_assoc:
                     yield feat_assoc
