@@ -128,15 +128,19 @@ def harvest(genes):
 
         # verify that the cache is valid, i.e. it refers to the correct file, gene set, etc.
         cache_valid = False
-        if  os.path.exists(cache_file_path):
+        if os.path.exists(cache_file_path):
             with open(cache_file_path, "r") as cache_fp:
-                cached_figures = json.load(cache_fp)
+                try:
+                    cached_figures = json.load(cache_fp)
 
-                cache_valid = (
-                    all(k in cached_figures for k in ('filename', 'gene_set', 'total_variants', 'matching_variants',)) and
-                    cached_figures['filename'] == CLINVAR_XML_FILE and
-                    set(cached_figures['gene_set']) == set(gene_set)
-                )
+                    cache_valid = (
+                        all(k in cached_figures for k in ('filename', 'gene_set', 'total_variants', 'matching_variants',)) and
+                        cached_figures['filename'] == CLINVAR_XML_FILE and
+                        set(cached_figures['gene_set']) == set(gene_set)
+                    )
+                except Exception as ex:
+                    logging.warn("Couldn't load cached ClinVar variant counts, recomputing...", exc_info=ex)
+                    cache_valid = False
 
         if cache_valid and USE_COUNTS_CACHE:
             total_variants = cached_figures['total_variants']
@@ -159,7 +163,7 @@ def harvest(genes):
             with open(cache_file_path, "w") as cache_fp:
                 json.dump({
                     "filename": CLINVAR_XML_FILE,
-                    "gene_set": gene_set,
+                    "gene_set": list(gene_set),
                     "total_variants": total_variants,
                     "matching_variants": matching_variants
                 }, cache_fp)
