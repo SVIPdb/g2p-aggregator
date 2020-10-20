@@ -46,11 +46,9 @@ cosmic_lookup_table.tsv: CosmicMutantExport.tsv.gz
 	(head -n 1 temp.tsv ; tail -n +2 temp.tsv | sort | uniq) > cosmic_lookup_table.tsv
 	rm -f temp.tsv
 
-## produce version of COSMIC sorted by gene, alteration so that we can filter out genes and alterations in linear time
-## the command below reads off the first line of the file (i.e., the header), then sorts the remaining lines by their 1st and 19th fields
-CosmicMutantExport_sorted.tsv: CosmicMutantExport.tsv.gz
-	gunzip -k CosmicMutantExport.tsv.gz
-	pv CosmicMutantExport.tsv | ( read -r ; printf "%s\n" "$${REPLY}" ; sort --field-separator='\t' -k1,1 -k19,19 ) > CosmicMutantExport_sorted.tsv
+## produce a version of COSMIC indexed by gene, making it much faster to process entries later on
+CosmicMutantExport.sqlite: CosmicMutantExport.tsv.gz
+	./cosmic_to_sqlite <( gunzip -c CosmicMutantExport.tsv.gz | tail -n +2 ) CosmicMutantExport.sqlite
 
 ## Create lookup tables for proteins
 proteins:

@@ -32,8 +32,6 @@ hgnorm = hgvs.normalizer.Normalizer(hdp)
 hgvsparser = hgvs.parser.Parser()
 am = hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh37', normalize=True)
 
-GENE_COUNT_CACHE_FILE = '.harvest_cache/_cached_cosmic_genes.json'
-COSMIC_MUTANTS_SORTED_FILE = '/data/CosmicMutantExport_sorted.tsv'
 COSMIC_MUTANTS_DB_FILE = '/data/CosmicMutantExport.sqlite'
 
 
