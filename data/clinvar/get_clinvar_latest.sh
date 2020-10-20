@@ -19,7 +19,14 @@ fi
 
 # download the full release, write the checksum out
 curl -f -L -O "${VARIATION_XML_PATH}${VARIATION_XML_FILE}" || die "Couldn't download ${VARIATION_XML_FILE}"
-echo $latest_md5 > ${VARIATION_MD5_FILE}
+
+# check that the XML file matches
+RESULT_MD5="$( md5sum ${VARIATION_XML_FILE} | cut -d ' ' -f 1 )"
+if [ "${RESULT_MD5}" -eq "${latest_md5}" ]; then
+    echo $latest_md5 > ${VARIATION_MD5_FILE}
+else
+    die "MD5 sum of downloaded file (${RESULT_MD5}) doesn't match the reference (${latest_md5})"
+fi
 
 # also delete the clinvar harvester's variant count cache file since it's invalid now
 rm .var_counts_cache.json 2>/dev/null
