@@ -37,6 +37,9 @@ case "$1" in
             exit 1
 esac
 
+# shift off the command that we parsed previously
+shift 1
+
 declare -A SILOS
 SILOS[postgres]="--silos postgres --pg_host ${POSTGRES_HOST} --pg_db ${POSTGRES_DB} --pg_user ${POSTGRES_USER} --pg_pass ${POSTGRES_PASSWORD}"
 SILOS[elastic]="--silos elastic --elastic_search elasticsearch"
@@ -54,5 +57,5 @@ fi
 
 python harvester.py -ds \
   ${SILOS[$CHOSEN_SILO]} \
-  --harvesters "${HARVESTERS}" --genes "${GENES}" \
-  ${EXTRA_ARGS} "$@"
+  --harvesters ${HARVESTERS} --genes ${GENES} \
+  ${EXTRA_ARGS} $@
