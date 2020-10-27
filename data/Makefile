@@ -1,3 +1,6 @@
+# we rely on some bash features (e.g., <( cmd )), so we use bash as the makefile's shell
+SHELL=bash
+
 # COSMIC Mutation Data; can download from https://grch37-cancer.sanger.ac.uk/cosmic/download
 # Note: we want GrCh37 build for now since most databases use this build.
 # https://grch37-cancer.sanger.ac.uk/cosmic/files?data=/files/grch37/cosmic/v81/CosmicMutantExport.tsv.gz
@@ -9,10 +12,11 @@ BENCHMARK_DATASET=oncokb
 CGI_VERSION=20180117
 
 all: oncokb_all_actionable_variants.tsv cgi_biomarkers_per_variant.tsv \
-		cosmic_lookup_table.tsv CosmicMutantExport_sorted.tsv \
+		cosmic_lookup_table.tsv CosmicMutantExport.sqlite \
+		clinvar/ClinVarVariationRelease_00-latest.xml \
 		cgi_mut_benchmarking.tsv oncokb_mut_benchmarking.tsv \
 		benchmark_results.txt \
-		genesets/cosmic/census_genes.tsv \
+		genesets/cosmic/cancer_gene_census.csv \
 		pmkb_interpretations.json
 
 ## Do bulk download of OncoKB and set up TSV for ingestion.
@@ -43,13 +47,17 @@ CosmicMutantExport.tsv.gz: .cosmic_creds
 
 ## Create COSMIC lookup table suitable for annotating variants with chrom/start/end/ref/alt
 cosmic_lookup_table.tsv: CosmicMutantExport.tsv.gz
-	gunzip -c CosmicMutantExport.tsv.gz | tail -n +2 | python ${COSMIC_LOOKUPGEN_SCRIPT} create_table > temp.tsv
+	gunzip -c CosmicMutantExport.tsv.gz | tail -n +2 | python2 ${COSMIC_LOOKUPGEN_SCRIPT} create_table > temp.tsv
 	(head -n 1 temp.tsv ; tail -n +2 temp.tsv | sort | uniq) > cosmic_lookup_table.tsv
 	rm -f temp.tsv
 
 ## produce a version of COSMIC indexed by gene, making it much faster to process entries later on
 CosmicMutantExport.sqlite: CosmicMutantExport.tsv.gz
 	./cosmic_to_sqlite.sh <( gunzip -c CosmicMutantExport.tsv.gz | tail -n +2 ) CosmicMutantExport.sqlite
+
+## ClinVar XML download
+clinvar/ClinVarVariationRelease_00-latest.xml:
+	cd ./clinvar && ./get_clinvar_latest.sh && gunzip ClinVarVariationRelease_00-latest.xml.gz
 
 ## Create lookup tables for proteins
 proteins:
@@ -70,7 +78,7 @@ oncokb_mut_benchmarking.tsv: oncokb_all_actionable_variants.tsv
 
 ## Benchmark file.
 benchmark_results.txt: cosmic_lookup_table.tsv $(BENCHMARK_DATASET)_mut_benchmarking.tsv
-	 python ${COSMIC_LOOKUPGEN_SCRIPT} benchmark --lookup-file cosmic_lookup_table.tsv \
+	 python2 ${COSMIC_LOOKUPGEN_SCRIPT} benchmark --lookup-file cosmic_lookup_table.tsv \
 	 	--benchmark-file $(BENCHMARK_DATASET)_mut_benchmarking.tsv > benchmark_results.txt
 
 ## OncoKB requires credentials to access the API; this prompts the user to register,
