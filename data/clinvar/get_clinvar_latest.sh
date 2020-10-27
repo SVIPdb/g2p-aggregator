@@ -22,7 +22,7 @@ curl -f -L -O "${VARIATION_XML_PATH}${VARIATION_XML_FILE}" || die "Couldn't down
 
 # check that the XML file matches
 RESULT_MD5="$( md5sum ${VARIATION_XML_FILE} | cut -d ' ' -f 1 )"
-if [ "${RESULT_MD5}" -eq "${latest_md5}" ]; then
+if [ "${RESULT_MD5}" == "${latest_md5}" ]; then
     echo $latest_md5 > ${VARIATION_MD5_FILE}
 else
     die "MD5 sum of downloaded file (${RESULT_MD5}) doesn't match the reference (${latest_md5})"
