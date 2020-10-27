@@ -1,2 +1,20 @@
+# ignore credentials files
 .cosmic_creds
 .oncokb_apikey
+
+# ignore things that are produced by the Makefile
+CosmicMutantExport.tsv.gz
+CosmicMutantExport.sqlite
+cgi_biomarkers_20180117
+cgi_mut_benchmarking.tsv
+cosmic_lookup_table.tsv
+oncokb_all_actionable_variants.tsv
+oncokb_all_actionable_variants_20201027.tsv
+oncokb_mut_benchmarking.tsv
+clinvar/ClinVarVariationRelease_00-latest.xml
+clinvar/ClinVarVariationRelease_00-latest.xml.gz.md5
+
+# ignore things that are produced by the harvester
+clinvar/.var_counts_cache.json
+ensembl_txac_to_refseq.tsv
+ncbi_gene/Homo_sapiens.gene_info
