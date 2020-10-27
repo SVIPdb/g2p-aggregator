@@ -5,7 +5,8 @@ COSMIC_LOOKUPGEN_SCRIPT=../harvester/lookups/cosmic_lookup_table.py
 
 BENCHMARK_DATASET=oncokb
 
-CGI_VERSION=20180117 # previous version: 20170208
+# previous version: 20170208
+CGI_VERSION=20180117
 
 all: oncokb_all_actionable_variants.tsv cgi_biomarkers_per_variant.tsv \
 		cosmic_lookup_table.tsv CosmicMutantExport_sorted.tsv \
@@ -48,7 +49,7 @@ cosmic_lookup_table.tsv: CosmicMutantExport.tsv.gz
 
 ## produce a version of COSMIC indexed by gene, making it much faster to process entries later on
 CosmicMutantExport.sqlite: CosmicMutantExport.tsv.gz
-	./cosmic_to_sqlite <( gunzip -c CosmicMutantExport.tsv.gz | tail -n +2 ) CosmicMutantExport.sqlite
+	./cosmic_to_sqlite.sh <( gunzip -c CosmicMutantExport.tsv.gz | tail -n +2 ) CosmicMutantExport.sqlite
 
 ## Create lookup tables for proteins
 proteins:
