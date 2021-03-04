@@ -14,7 +14,7 @@ latest_md5=$( curl -s -S -f ${VARIATION_XML_PATH}${VARIATION_XML_FILE}.md5 | cut
 
 # check if we have an existing MD5 file and if its contents match ours
 if [ -f "${VARIATION_MD5_FILE}" ] && ( diff "${VARIATION_MD5_FILE}" <( echo $latest_md5 ) 2>&1 >/dev/null  ); then
-    die "local MD5 file exists with matching checksum to server's version, aborting"
+    die "local MD5 file exists with matching checksum to server's version, aborting" 0
 fi
 
 # download the full release, write the checksum out
