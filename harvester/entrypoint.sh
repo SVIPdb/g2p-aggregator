@@ -4,8 +4,32 @@ HARVESTERS="oncokb civic clinvar cosmic"
 
 # declare profiles here, so we don't have to have 1000 entrypoint scripts
 case "$1" in
+	all)
+	    HARVESTERS="cosmic clinvar civic"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+
         cosmic)
-            HARVESTERS="cosmic clinvar civic oncokb"
+            HARVESTERS="cosmic"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+
+        clinvar)
+            HARVESTERS="clinvar"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+
+        civic)
+            HARVESTERS="civic"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+
+        onkokb)
+            HARVESTERS="oncokb"
             GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
             EXTRA_ARGS="--gene_chunk_size 15"
             ;;

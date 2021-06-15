@@ -66,7 +66,9 @@ proteins:
 
 ## Create cgi_mut_benchmarking.tsv file.
 cgi_mut_benchmarking.tsv:
-	grep MUT cgi_biomarkers_20170208.tsv | \
+	curl -s https://www.cancergenomeinterpreter.org/data/cgi_biomarkers_latest.zip -o cgi_biomarkers_latest.zip && \
+	unzip cgi_biomarkers_latest.zip && \
+	grep MUT cgi_biomarkers.tsv | \
 	egrep -v "oncogenic mutation|insertion|deletion|wildtype|promoters|_variant" | \
 	cut -f4 | sed 's/\:/	/g' > cgi_mut_benchmarking.tsv
 
