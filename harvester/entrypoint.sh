@@ -9,12 +9,14 @@ case "$1" in
             GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
             EXTRA_ARGS="--gene_chunk_size 15"
             ;;
-
+        test)
+            GENES="BCL9L BCLAF1 BCOR BCORL1 BCR BIRC3 BIRC6 BLM BMP5 BMPR1A BRAF BRCA1 BRCA2 BRD3 BRD4'"
+            EXTRA_ARGS="--log=INFO"
+            ;;
         simple)
             GENES="RAC1 ABL2"
             EXTRA_ARGS="--log=INFO"
             ;;
-
         merged)
             echo "Updating combined geneset from OncoKB and CiVIC"
             if ../data/genesets/merged/acquire_merged_list.sh; then
