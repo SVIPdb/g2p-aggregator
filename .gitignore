@@ -65,3 +65,8 @@ data/disgenet/disgenet_2020.db
 data/disgenet/disgenet_2020.db.gz
 data/temp.tsv
 harvester/disgenet.db
+data/cgi_biomarkers.tsv
+data/cgi_biomarkers_latest.zip
+data/proteins/
+harvester/cached_2021-06-11
+harvester/merged_gene_list_latest.txt
