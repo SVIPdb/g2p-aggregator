@@ -161,8 +161,8 @@ def convert(gene_data):
                 ],
                 'drug_interaction_type': evidence_item['drug_interaction_type'],
                 'phenotypes': [{
-                    'description': evidence_item['disease']['name'] if 'name' in evidence_item['disease'] else 'N/A',
-                    'id': evidence_item['disease']['url'] if 'url' in evidence_item['disease'] else 'N/A'
+                    'description': evidence_item['disease']['name'] if 'disease' in evidence_item and 'name' in evidence_item['disease'] else 'N/A',
+                    'id': evidence_item['disease']['url'] if 'disease' in evidence_item and 'url' in evidence_item['disease'] else 'N/A'
                 }],
                 'evidence': [{
                     "evidenceType": {
