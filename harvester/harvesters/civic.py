@@ -148,6 +148,7 @@ def convert(gene_data):
                 variant['gene_id'], variant['id'], evidence_item['id']
             )
 
+            print(evidence_item)
             association = {
                 'variant_name': _extract_name(variant),
                 'description': evidence_item['description'],
