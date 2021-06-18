@@ -148,7 +148,6 @@ def convert(gene_data):
                 variant['gene_id'], variant['id'], evidence_item['id']
             )
 
-            print(evidence_item)
             association = {
                 'variant_name': _extract_name(variant),
                 'description': evidence_item['description'],
@@ -162,8 +161,8 @@ def convert(gene_data):
                 ],
                 'drug_interaction_type': evidence_item['drug_interaction_type'],
                 'phenotypes': [{
-                    'description': evidence_item['disease']['name'] if 'disease' in evidence_item and 'name' in evidence_item['disease'] else 'N/A',
-                    'id': evidence_item['disease']['url'] if 'disease' in evidence_item and 'url' in evidence_item['disease'] else 'N/A'
+                    'description': evidence_item['disease']['name'] if 'disease' in evidence_item and evidence_item['disease'] is not None and 'name' in evidence_item['disease'] else 'N/A',
+                    'id': evidence_item['disease']['url'] if 'disease' in evidence_item and evidence_item['disease'] is not None and 'url' in evidence_item['disease'] else 'N/A'
                 }],
                 'evidence': [{
                     "evidenceType": {
