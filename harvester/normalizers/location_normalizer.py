@@ -9,11 +9,12 @@ import hgvs.location
 import hgvs.posedit
 import hgvs.edit
 import hgvs.parser
-from hgvs.exceptions import HGVSInvalidVariantError, HGVSError
+from hgvs.exceptions import HGVSError
 from hgvs.sequencevariant import SequenceVariant
 import hgvs.dataproviders.uta
 import hgvs.assemblymapper
 
+from lookups.hgvs_parsing import hgvsparser, am
 from normalizers.feature_enricher import enrich
 
 from normalizers.reference_genome_normalizer import normalize as normalize_referencename
@@ -21,13 +22,6 @@ from normalizers.reference_genome_normalizer import normalize as normalize_refer
 from utils_ex.instrumentation import add_crawl_status
 
 # these shared assembly mappers will allow us to convert HGVS g. variants to c. and p. later on
-hdp = hgvs.dataproviders.uta.connect()
-hgnorm = hgvs.normalizer.Normalizer(hdp)
-hgvsparser = hgvs.parser.Parser()
-am = {
-    'GRCh37': hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh37', normalize=True),
-    'GRCh38': hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh38', normalize=True)
-}
 
 
 def _complement(bases, reverse=True):
