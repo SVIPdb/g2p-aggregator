@@ -91,7 +91,8 @@ def fast_iter(context):
 
 def is_valid_record(elem, gene_set):
     if gene_set:
-        these_genes = set(elem.xpath("InterpretedRecord/*/GeneList/Gene/@Symbol", smart_strings=False))
+        these_genes = set(elem.xpath(
+            "InterpretedRecord/*/GeneList/Gene/@Symbol", smart_strings=False))
         if gene_set.isdisjoint(these_genes):
             return False
 
@@ -121,10 +122,12 @@ def harvest(genes):
     """ given an array of gene symbols, harvest them from clinvar"""
     gene_set = set(genes) if genes else None
 
-    is_valid_record_w_genes = functools.partial(is_valid_record, gene_set=gene_set)
+    is_valid_record_w_genes = functools.partial(
+        is_valid_record, gene_set=gene_set)
 
     with open(CLINVAR_XML_FILE) as fp:
-        cache_file_path = os.path.join(os.path.dirname(CLINVAR_XML_FILE), ".var_counts_cache.json")
+        cache_file_path = os.path.join(os.path.dirname(
+            CLINVAR_XML_FILE), ".var_counts_cache.json")
 
         # verify that the cache is valid, i.e. it refers to the correct file, gene set, etc.
         cache_valid = False
@@ -139,7 +142,8 @@ def harvest(genes):
                         set(cached_figures['gene_set']) == set(gene_set)
                     )
                 except Exception as ex:
-                    logging.warn("Couldn't load cached ClinVar variant counts, recomputing...", exc_info=ex)
+                    logging.warn(
+                        "Couldn't load cached ClinVar variant counts, recomputing...", exc_info=ex)
                     cache_valid = False
 
         if cache_valid and USE_COUNTS_CACHE:
@@ -152,7 +156,8 @@ def harvest(genes):
 
             with OpTimeLogger(name="Clinvar Variant Counting"):
                 print("Calculating elements in ClinVar input set...")
-                ctx = etree.iterparse(fp, events=("end",), tag="VariationArchive")
+                ctx = etree.iterparse(fp, events=(
+                    "end",), tag="VariationArchive")
                 for action, elem in fast_iter(ctx):
                     # first, if we have a gene list, check if this one's in it and skip it if it's not
                     total_variants += 1
@@ -171,7 +176,8 @@ def harvest(genes):
             # and reset the file pointer so we can re-read it all
             fp.seek(0)
 
-        print("Matching vs. total variants: %d/%d" % (matching_variants, total_variants))
+        print("Matching vs. total variants: %d/%d" %
+              (matching_variants, total_variants))
 
         ctx = etree.iterparse(fp, events=("end",), tag="VariationArchive")
 
@@ -213,17 +219,20 @@ def convert(root):
     """
 
     # general values
-    source_url = 'https://www.ncbi.nlm.nih.gov/clinvar/variation/%d' % int(root.attrib['VariationID'])
+    source_url = 'https://www.ncbi.nlm.nih.gov/clinvar/variation/%d' % int(
+        root.attrib['VariationID'])
 
     # -- features-related values --
     genes = root.xpath('InterpretedRecord/*/GeneList/Gene')
     gene_symbols = [x.attrib['Symbol'] for x in genes]
 
     try:
-        grch37_pos = root.xpath('//SimpleAllele/Location/SequenceLocation[@Assembly="GRCh37"]')[0]
+        grch37_pos = root.xpath(
+            '//SimpleAllele/Location/SequenceLocation[@Assembly="GRCh37"]')[0]
     except IndexError:
         # this variant has no GRCh37 values; we can't include it, so we have to skip it
-        logging.warn("ClinVar entry has no GRCh37 SequenceLocation, skipping...")
+        logging.warn(
+            "ClinVar entry has no GRCh37 SequenceLocation, skipping...")
         return
 
     # FIXME: when running over the full clinvar set, this expression throws an error...maybe because there's no hg19 expression?
@@ -233,18 +242,23 @@ def convert(root):
     #  since it could be in a non-coding or inter-gene region, or it could be a variant that involves multiple genes,
     #  i.e a fusion. hrm...
     try:
-        hgvs_g = root.xpath('InterpretedRecord/*/HGVSlist/HGVS[@Assembly="GRCh37" and @Type="genomic, top-level"]/NucleotideExpression/Expression/text()')[0]
+        hgvs_g = root.xpath(
+            'InterpretedRecord/*/HGVSlist/HGVS[@Assembly="GRCh37" and @Type="genomic, top-level"]/NucleotideExpression/Expression/text()')[0]
     except IndexError:
-        logging.warn("Unable to locate HGVS.g field in variant@ %s (gene %s), skipping..." % (source_url, ", ".join(gene_symbols)))
+        logging.warn("Unable to locate HGVS.g field in variant@ %s (gene %s), skipping..." %
+                     (source_url, ", ".join(gene_symbols)))
         return
 
     # find the hgvs.c representation that uses the NCBI transcript accessions (prefixed by NM_), not LRG
     # (since pyhgvs can't handle projections w/it afaik)
-    hgvs_c_first_node = first(root.xpath('InterpretedRecord/*/HGVSlist/HGVS[@Type="coding"]/NucleotideExpression[starts-with(@sequenceAccessionVersion, "NM_")]'))
+    hgvs_c_first_node = first(root.xpath(
+        'InterpretedRecord/*/HGVSlist/HGVS[@Type="coding"]/NucleotideExpression[starts-with(@sequenceAccessionVersion, "NM_")]'))
     # looking for <HGVS type="protein"> gives UniProt accession numberrs for some reason
-    hgvs_p_first_node = first(root.xpath('InterpretedRecord/*/HGVSlist/HGVS[@Type="coding"]/ProteinExpression'))
+    hgvs_p_first_node = first(root.xpath(
+        'InterpretedRecord/*/HGVSlist/HGVS[@Type="coding"]/ProteinExpression'))
 
-    prot_change = remap_prots(hgvs_p_first_node.attrib['change'][2:]) if hgvs_p_first_node is not None else None
+    prot_change = remap_prots(
+        hgvs_p_first_node.attrib['change'][2:]) if hgvs_p_first_node is not None else None
 
     # FIXME: consider skipping the entry if we can't get the protein change,
     #  since it's likely intronic or outside the gene
@@ -252,7 +266,8 @@ def convert(root):
     # FIXME: currently some variants (looking at you, EGFR) have multiple associated genes
     #  for now i'm going to ignore them, but we'll revisit them later
     if len(gene_symbols) != 1:
-        logging.warn("Non-singular gene list specified (%s), skipping..." % ", ".join(gene_symbols))
+        logging.warn("Non-singular gene list specified (%s), skipping..." %
+                     ", ".join(gene_symbols))
         return
 
     # each variant will produce multiple assocations for the same set of features
@@ -266,7 +281,8 @@ def convert(root):
         'features': [
             {
                 'geneSymbol': gene_symbols[0],
-                'name': prot_change if prot_change else hgvs_g.split(':')[1],  # typically <PROTEIN-CHANGE>, e.g. "V600E"
+                # typically <PROTEIN-CHANGE>, e.g. "V600E"
+                'name': prot_change if prot_change else hgvs_g.split(':')[1],
                 'sequence_ontology': {  # optional, injected by biomarker_normalizer, relies on biomarker_type
                     'soid': 'required',
                     'so_name': 'required',
@@ -280,8 +296,8 @@ def convert(root):
                 'isoform': None,  # presumbly an ensembl accession, starts with ENST
                 'biomarker_type': root.xpath('InterpretedRecord/SimpleAllele/VariantType/text()')[0],
                 'chromosome': grch37_pos.attrib['Chr'],
-                'start': grch37_pos.attrib['start'],
-                'end': grch37_pos.attrib['stop'],
+                'start': grch37_pos.attrib['start'] if 'start' in grch37_pos.attrib else -1,
+                'end': grch37_pos.attrib['stop'] if 'stop' in grch37_pos.attrib else -1,
                 'ref': grch37_pos.attrib.get('referenceAllele', grch37_pos.attrib.get('referenceAlleleVCF')),
                 'alt': grch37_pos.attrib.get('alternateAllele', grch37_pos.attrib.get('alternateAlleleVCF')),
                 'hgvs_g': hgvs_g,
@@ -290,7 +306,8 @@ def convert(root):
                 'dbsnp_ids': root.xpath('//XRef[@Type="rs" and @DB="dbSNP"]/@ID'),
                 'myvariant_hg19': None,  # injected by normalizer
                 'mv_info': None,  # injected by normalizer
-                'crawl_status': None  # used to report crawling issues, injected as defaultdict by utils_ex.instrumentation
+                # used to report crawling issues, injected as defaultdict by utils_ex.instrumentation
+                'crawl_status': None
             }
         ]
     }
@@ -303,18 +320,22 @@ def extract_rcvs(basis, gene_symbols, prot_change, root):
     for rcv_accession in root.xpath('InterpretedRecord/RCVList/RCVAccession'):
         feat_assoc = basis.copy()
 
-        condition = first(rcv_accession.xpath("InterpretedConditionList/InterpretedCondition"))
+        condition = first(rcv_accession.xpath(
+            "InterpretedConditionList/InterpretedCondition"))
 
         # noinspection PyTypeChecker
         feat_assoc['association'] = {
             'description': "%s %s" % (gene_symbols[0], prot_change),
-            'drug_labels': None,  # a comma-delimited list of drug names (none for clinvar)
-            'drug_interaction_type': None,  # only supplied by CIViC afaict, and only ever 'Substitutes' or null
+            # a comma-delimited list of drug names (none for clinvar)
+            'drug_labels': None,
+            # only supplied by CIViC afaict, and only ever 'Substitutes' or null
+            'drug_interaction_type': None,
             'variant_name': prot_change,
             # 'source_link': source_url,  # should be the URL of the evidence item(s) # FIXME: validate this
             # 'source_link': 'https://www.ncbi.nlm.nih.gov/clinvar/?term="%s"' % x['ID'],
             'source_link': 'https://www.ncbi.nlm.nih.gov/clinvar/%(Accession)s.%(Version)s/' % rcv_accession.attrib,
-            'evidence_type': 'Predisposing',  # all clinvar records are about clinical significance
+            # all clinvar records are about clinical significance
+            'evidence_type': 'Predisposing',
             'evidence_direction': 'Supports',
             'clinical_significance': rcv_accession.attrib['Interpretation'],
             'evidence_level': rcv_accession.attrib['ReviewStatus'],
@@ -328,7 +349,8 @@ def extract_rcvs(basis, gene_symbols, prot_change, root):
                 {
                     # ontology link, e.g. http://purl.obolibrary.org/obo/DOID_4329
                     'source': (
-                        DISEASE_DB_URLS[condition.attrib['DB']] % condition.attrib['ID']
+                        DISEASE_DB_URLS[condition.attrib['DB']
+                                        ] % condition.attrib['ID']
                         if condition is not None and 'DB' in condition.attrib and condition.attrib['DB'] in DISEASE_DB_URLS
                         else None
                     ),
@@ -336,7 +358,8 @@ def extract_rcvs(basis, gene_symbols, prot_change, root):
                     'term': condition.text,
                     # some kind of ontology reference, e.g. 'DOID:4329'
                     'id': (
-                        "%s:%s" % (condition.attrib['DB'], condition.attrib['ID'])
+                        "%s:%s" % (
+                            condition.attrib['DB'], condition.attrib['ID'])
                         if condition is not None and 'DB' in condition.attrib
                         else None
                     ),
@@ -360,18 +383,22 @@ def extract_scvs(basis, gene_symbols, prot_change, root):
         feat_assoc = basis.copy()
 
         acc = first(scv.xpath('ClinVarAccession'))
-        condition = first(scv.xpath("TraitSet/Trait[@Type='Disease']/Name/ElementValue[@Type='Preferred']"))
+        condition = first(scv.xpath(
+            "TraitSet/Trait[@Type='Disease']/Name/ElementValue[@Type='Preferred']"))
 
         # noinspection PyTypeChecker
         feat_assoc['association'] = {
             'description': "%s %s" % (gene_symbols[0], prot_change),
-            'drug_labels': None,  # a comma-delimited list of drug names (none for clinvar)
-            'drug_interaction_type': None,  # only supplied by CIViC afaict, and only ever 'Substitutes' or null
+            # a comma-delimited list of drug names (none for clinvar)
+            'drug_labels': None,
+            # only supplied by CIViC afaict, and only ever 'Substitutes' or null
+            'drug_interaction_type': None,
             'variant_name': prot_change,
             # 'source_link': source_url,  # should be the URL of the evidence item(s) # FIXME: validate this
             'source_link': 'https://www.ncbi.nlm.nih.gov/clinvar/?term="%(Accession)s"' % acc.attrib,
             # 'source_link': 'https://www.ncbi.nlm.nih.gov/clinvar/%(Accession)s.%(Version)s/' % scv.attrib,
-            'evidence_type': 'Predisposing',  # all clinvar records are about clinical significance
+            # all clinvar records are about clinical significance
+            'evidence_type': 'Predisposing',
             'evidence_direction': 'Supports',
             'clinical_significance': first(scv.xpath('Interpretation/Description/text()')),
             'evidence_level': first(scv.xpath('ReviewStatus/text()')),
@@ -383,7 +410,8 @@ def extract_scvs(basis, gene_symbols, prot_change, root):
                 {
                     # ontology link, e.g. http://purl.obolibrary.org/obo/DOID_4329
                     'source': (
-                        DISEASE_DB_URLS[condition.attrib['DB']] % condition.attrib['ID']
+                        DISEASE_DB_URLS[condition.attrib['DB']
+                                        ] % condition.attrib['ID']
                         if condition is not None and condition.attrib['DB'] in DISEASE_DB_URLS
                         else None
                     ),
@@ -409,7 +437,8 @@ def extract_scvs(basis, gene_symbols, prot_change, root):
                     'evidenceType': {  # optional
                         'id': "%s-%s" % (
                             gene_symbols[0],
-                            scv.xpath('ConditionList/TraitSet[@Type="Disease"]/Trait[@Type="Disease"]/Name/ElementValue[@Type="Preferred"]/text()')[0]
+                            scv.xpath(
+                                'ConditionList/TraitSet[@Type="Disease"]/Trait[@Type="Disease"]/Name/ElementValue[@Type="Preferred"]/text()')[0]
                         ),  # e.g., 'BRAF-Erdheim-Chester Disease' (gene name, disease name)
                         'sourceName': 'clinvar'
                     }

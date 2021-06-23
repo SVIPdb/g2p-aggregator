@@ -1,7 +1,25 @@
 #!/usr/bin/env python
+import hashlib
+import silos.postgres_silo as postgres_silo
+from silos.postgres_silo import PostgresSilo
+import silos.file_silo as file_silo
+from silos.file_silo import FileSilo
+import silos.kafka_silo as kafka_silo
+from silos.kafka_silo import KafkaSilo
+import silos.elastic_silo as elastic_silo
+from silos.elastic_silo import ElasticSilo
+from filters import has_hgvs
+from utils_ex.instrumentation import DelayedOpLogger, show_runtime_stats
+import yaml
+import logging.config
+import logging
+import argparse
+import xxhash
+import json
 import os
 import sys
-import importlib, pkgutil
+import importlib
+import pkgutil
 
 from utils_ex.iterables import grouper_flat
 from utils_ex.tqdm_logger import TqdmLoggingHandler
@@ -22,27 +40,9 @@ requests_cache.install_cache(
     }
 )
 
-import json
-import xxhash
-import argparse
-import logging
-import logging.config
-import yaml
-
-from utils_ex.instrumentation import DelayedOpLogger, show_runtime_stats
-from filters import has_hgvs
 
 # these silos are added on line 4, but adding them again allows for code navigation
 # FIXME: the sys.path.append on line 4 should be removed in favor of a real import
-from silos.elastic_silo import ElasticSilo
-import silos.elastic_silo as elastic_silo
-from silos.kafka_silo import KafkaSilo
-import silos.kafka_silo as kafka_silo
-from silos.file_silo import FileSilo
-import silos.file_silo as file_silo
-from silos.postgres_silo import PostgresSilo
-import silos.postgres_silo as postgres_silo
-import hashlib
 
 # add handler to global logger
 logger = logging.getLogger()
@@ -62,6 +62,7 @@ USE_NEW_NORMALIZER = False
 # produces a list of normalizers to annotate each feature association (and optionally defines what to report on the console if
 # they take more time than expected to run)
 normalizers = None
+
 
 def get_normalizers():
     """
@@ -88,10 +89,11 @@ def get_normalizers():
             #     feature_association['association'].get('environmentalContexts', None)),
 
             (disease_normalizer, lambda dol, feature_association:
-            feature_association['association']['phenotypes'][0]['description']
-            if 'phenotypes' in feature_association['association']
-               and len(feature_association['association']['phenotypes']) > 0 else None),
-            (oncogenic_normalizer, None),  # functionality for oncogenic_normalizer already mostly in harvesters
+             feature_association['association']['phenotypes'][0]['description']
+             if 'phenotypes' in feature_association['association']
+             and len(feature_association['association']['phenotypes']) > 0 else None),
+            # functionality for oncogenic_normalizer already mostly in harvesters
+            (oncogenic_normalizer, None),
             (new_location_normalizer if USE_NEW_NORMALIZER else location_normalizer, None),
             (reference_genome_normalizer, None),
             # (biomarker_normalizer, None), # disabled b/c it takes forever and we don't even use/trust it
@@ -100,6 +102,7 @@ def get_normalizers():
         ]
 
     return normalizers
+
 
 # a list of filters applied to feature associations immediately before yielding to the silo; if any filter returns
 # false for that feature association, it's discarded
@@ -162,17 +165,20 @@ def memoized(src, harvester, genes):
     # the cache key basically encodes the script's arguments as part of the cache's filename, so we can re-acquire if we
     # change the arguments.
     cache_key = xxhash.xxh32(json.dumps([genes])).hexdigest()
-    cache_path = os.path.join(".harvest_cache", "%s_%s.jsonl" % (cache_key, harvester))
+    cache_path = os.path.join(
+        ".harvest_cache", "%s_%s.jsonl" % (cache_key, harvester))
 
     # check if there's something in the cache to use
     if os.path.exists(cache_path):
-        logging.info("Using cached values for %s (in file %s)" % (harvester, cache_path))
+        logging.info("Using cached values for %s (in file %s)" %
+                     (harvester, cache_path))
         with open(cache_path, "r") as cache_fp:
             for record in cache_fp:
                 yield json.loads(record)
     else:
         # populate the cache while yielding samples from source, then eventually save it
-        logging.info("Writing output from %s (to file %s)" % (harvester, cache_path))
+        logging.info("Writing output from %s (to file %s)" %
+                     (harvester, cache_path))
         with open(cache_path, "w") as cache_fp:
             for record in src:
                 cache_fp.write("%s\n" % json.dumps(record))
@@ -225,7 +231,8 @@ def harvest(genes):
                 for feature_association in assoc_source:
                     # the silo will write to the general variants table only if this is true
                     # (e.g., we want authoritative sources to write to it, but other ones to not)
-                    feature_association['write_variants'] = phase.get('write_variants', False)
+                    feature_association['write_variants'] = phase.get(
+                        'write_variants', False)
 
                     if VERBOSE_ITEMS:
                         logging.info(
@@ -291,11 +298,14 @@ def _check_dup(harvested):
             continue
 
     if ignored_fas > 0:
-        logging.info("FAs that failed to pass filters: %d (out of %d)" % (ignored_fas, total_fas))
+        logging.info("FAs that failed to pass filters: %d (out of %d)" %
+                     (ignored_fas, total_fas))
     if duplicated_fas > 0:
-        logging.info("Duplicated FAs ignored: %d (out of %d)" % (duplicated_fas, total_fas))
+        logging.info("Duplicated FAs ignored: %d (out of %d)" %
+                     (duplicated_fas, total_fas))
     if duplicated_fas > 0:
-        logging.info("Failed normalizer FAs: %d (out of %d)" % (normalizer_failed_fas, total_fas))
+        logging.info("Failed normalizer FAs: %d (out of %d)" %
+                     (normalizer_failed_fas, total_fas))
 
 
 def main():
@@ -341,7 +351,8 @@ def main():
                            help='size of each chunk of genes to process, no value will disable chunking',
                            default=None)
 
-    argparser.add_argument("-l", "--log", dest="logLevel", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the logging level")
+    argparser.add_argument("-l", "--log", dest="logLevel", choices=[
+                           'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the logging level")
 
     elastic_silo.populate_args(argparser)
     kafka_silo.populate_args(argparser)
@@ -352,7 +363,8 @@ def main():
 
     # get list of harvesters in harvesters package
     # ignores anything that's a package and not a module for now
-    harvesters_available = [x[1] for x in pkgutil.iter_modules(path=['./harvesters']) if not x[2]]
+    harvesters_available = [x[1] for x in pkgutil.iter_modules(
+        path=['./harvesters']) if not x[2]]
 
     for h in args.harvesters:
         assert h in harvesters_available, "harvester is not a module: %r" % h
@@ -399,10 +411,12 @@ def main():
             # so we can skip harvesting them
             skip_genes = list(silo.get_genes())
 
-            logging.info("Skipping the following already-crawled genes: %s" % skip_genes)
+            logging.info(
+                "Skipping the following already-crawled genes: %s" % skip_genes)
 
             # remove these genes from args.genes
-            remaining_genes = list(x for x in args.genes if x not in skip_genes)
+            remaining_genes = list(
+                x for x in args.genes if x not in skip_genes)
 
             logging.info("Genes remaining to crawl: %s" % remaining_genes)
         else:
@@ -419,10 +433,13 @@ def main():
 
             if args.gene_chunk_size:
                 for gene_chunk in grouper_flat(remaining_genes, args.gene_chunk_size):
-                    logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
-                    silo.save_bulk(_check_dup(harvest(gene_chunk)), harvest_id=harvest_id, stats=stats)
+                    logging.info(" -> Processing gene chunk: %s" %
+                                 (gene_chunk,))
+                    silo.save_bulk(_check_dup(harvest(gene_chunk)),
+                                   harvest_id=harvest_id, stats=stats)
             else:
-                silo.save_bulk(_check_dup(harvest(remaining_genes)), harvest_id=harvest_id, stats=stats)
+                silo.save_bulk(_check_dup(harvest(remaining_genes)),
+                               harvest_id=harvest_id, stats=stats)
 
     # afterward, print some statistics on how long the normalizers are taking
     show_runtime_stats()

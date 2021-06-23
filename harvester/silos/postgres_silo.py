@@ -728,7 +728,7 @@ class PostgresSilo:
                 print("Updating harvest ID %s to status %s" %
                       (harvest_id, exit_status))
                 stats_json = json.dumps(
-                    stats, ensure_ascii=False).encode('utf-8')
+                    stats, ensure_ascii=False, encoding='utf-8')
                 print('exit_status', exit_status)
                 print('output', output)
                 print('stats_json', stats_json)
