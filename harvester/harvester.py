@@ -181,23 +181,32 @@ def memoized(src, harvester, genes):
 
 def harvest(genes):
     # FIXME: defined here temporarily, but will probably get filled in by main() later on
-    PHASES = [
-        {
-            "name": "authoritative",
-            "harvesters": [
-                "cosmic"
-            ],
-            "write_variants": True
-        },
-        {
-            "name": "evidence-only",
-            "harvesters": [
-                # run all the other selected harvesters
-                x for x in args.harvesters if x != "cosmic"
-            ],
-            "write_variants": False
-        },
-    ]
+    if args.phase_override:
+        PHASES = [
+            {
+                "name": "phase-override",
+                "harvesters": args.harvesters,
+                "write_variants": True
+            },
+        ]
+    else:
+        PHASES = [
+            {
+                "name": "authoritative",
+                "harvesters": [
+                    "cosmic", "svip_queue"
+                ],
+                "write_variants": True
+            },
+            {
+                "name": "evidence-only",
+                "harvesters": [
+                    # run all the other selected harvesters
+                    x for x in args.harvesters if x != "cosmic"
+                ],
+                "write_variants": False
+            },
+        ]
 
     """ get evidence from all sources """
     for phase in PHASES:
@@ -217,8 +226,7 @@ def harvest(genes):
                 # haven't changed. note that this *does not* perform cache validation, so use with caution. you also need to
                 # manually clear the cache (the files in .harvest_cache) if you want to recreate the memoization.
                 if args.memoize_harvest:
-                    assoc_source = memoized(harvester.harvest_and_convert(genes),
-                                            harvester=h, genes=args.genes)
+                    assoc_source = memoized(harvester.harvest_and_convert(genes), harvester=h, genes=args.genes)
                 else:
                     assoc_source = harvester.harvest_and_convert(genes)
 
@@ -311,6 +319,10 @@ def main():
                                     'oncokb', 'pmkb', 'brca', 'jax_trials',
                                     'molecularmatch_trials'])
 
+    argparser.add_argument('--phase_override', '-po',
+                           help='skips the initial COSMIC phase, causing the specified harvester(s) to write variant metadata',
+                           default=False, action="store_true")
+
     argparser.add_argument('--silos',  nargs='+',
                            help='''save to these silos. default:[elastic]''',
                            default=['elastic'],
@@ -382,7 +394,7 @@ def main():
 
     logging.info("delete_index: %r" % args.delete_index)
 
-    silos = _make_silos(args)
+    silos[:] = _make_silos(args)
 
     if not args.genes:
         logging.info("genes: all")
@@ -408,21 +420,32 @@ def main():
         else:
             remaining_genes = args.genes
 
-        with silo.track_harvest() as (stats, harvest_id):
-            stats['params'] = {
-                'gene_list': args.genes if args.genes else 'all',
-                'sources': args.harvesters,
-                'silos': args.silos,
-                'delete_index': args.delete_index,
-                'gene_chunks': args.gene_chunk_size
-            }
+        # check if silo has a track_harvest context manager
+        # if not, skip compiling stats and associating the run w/a harvest
+        if hasattr(silo, 'track_harvest'):
+            with silo.track_harvest() as (stats, harvest_id):
+                stats['params'] = {
+                    'gene_list': args.genes if args.genes else 'all',
+                    'sources': args.harvesters,
+                    'silos': args.silos,
+                    'delete_index': args.delete_index,
+                    'gene_chunks': args.gene_chunk_size
+                }
 
+                if args.gene_chunk_size:
+                    for gene_chunk in grouper_flat(remaining_genes, args.gene_chunk_size):
+                        logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
+                        silo.save_bulk(_check_dup(harvest(gene_chunk)), harvest_id=harvest_id, stats=stats)
+                else:
+                    silo.save_bulk(_check_dup(harvest(remaining_genes)), harvest_id=harvest_id, stats=stats)
+
+        else:
             if args.gene_chunk_size:
                 for gene_chunk in grouper_flat(remaining_genes, args.gene_chunk_size):
                     logging.info(" -> Processing gene chunk: %s" % (gene_chunk,))
-                    silo.save_bulk(_check_dup(harvest(gene_chunk)), harvest_id=harvest_id, stats=stats)
+                    silo.save_bulk(_check_dup(harvest(gene_chunk)))
             else:
-                silo.save_bulk(_check_dup(harvest(remaining_genes)), harvest_id=harvest_id, stats=stats)
+                silo.save_bulk(_check_dup(harvest(remaining_genes)))
 
     # afterward, print some statistics on how long the normalizers are taking
     show_runtime_stats()
