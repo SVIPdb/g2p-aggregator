@@ -596,6 +596,33 @@ class PostgresSilo:
                     )
                 )
 
+        # if this variant was submitted manually (e.g., via the SVIP submission queue),
+        # annotate the variant submission as completed and, if requested, create a curation entry keyed
+        # to the new variant(s)
+        if 'extras' in assoc and 'submitted_var_id' in assoc['extras']:
+            submit_id = assoc['extras']['submitted_var_id']
+            cols = ('resulting_variants', 'for_curation_request', 'curation_disease_id', 'requestor')
+            curs.execute("select {} from svip_submittedvariant where id=%s".format(", ".join(cols)), (submit_id,))
+            submission = dict(zip(cols, curs.fetchone()))
+
+            logging.info("Updating submitted variant w/id %s..." % submit_id)
+
+            # update it
+            curs.execute("""
+            update svip_submittedvariant set
+            status='completed', processed_on=now(),
+            resulting_variants = (select array_agg(distinct e) from unnest(resulting_variants || '{%s}') e)
+            where id=%s
+            """, (last_variant_id, submit_id))
+
+            # TODO: if for_curation_request is specified, create a svip_curationentry entry
+            if submission['for_curation_request']:
+                curs.execute("""
+                insert into svip_curationrequest (created_on, disease_id, requestor, submission_id, variant_id)
+                values (now(), %s, %s, %s, %s) on conflict DO NOTHING
+                """, (submission['curation_disease_id'], submission['requestor'], submit_id, last_variant_id))
+
+
     def save_bulk(self, feature_association_generator, harvest_id=None, stats=None):
         """
         Writes multiple feature associations to the database in a transaction.
@@ -617,6 +644,7 @@ class PostgresSilo:
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (5, 'svip_queue', 'SVIP Queue')")
 
                 print("Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
 
