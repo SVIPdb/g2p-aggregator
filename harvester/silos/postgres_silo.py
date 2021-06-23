@@ -635,7 +635,7 @@ class PostgresSilo:
 
         # ensure identifiers exist for our sources
         with conn.cursor() as curs:
-            curs.execute("select * from api_source")
+            curs.execute("select id, name from api_source")
             self.source_to_id = dict((x[1], x[0]) for x in curs.fetchall())
 
             if len(self.source_to_id) == 0:
@@ -644,7 +644,7 @@ class PostgresSilo:
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (5, 'svip_queue', 'SVIP Queue')")
+                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (5, 'svip_queue', 'SVIP Submissions')")
 
                 print("Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
 
