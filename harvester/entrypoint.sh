@@ -32,8 +32,15 @@ case "$1" in
             EXTRA_ARGS="--log=INFO"
             ;;
 
+        harvesters)
+            shift 1
+            HARVESTERS=$*
+            EXTRA_ARGS="--phase_override"
+            ;;
+
         *)
-            echo $"Usage: $0 {cosmic|simple|debug}"
+            echo $"Usage: $0 {cosmic|simple|debug|harvesters <harvesters>}"
+            echo "NOTE: specifying 'harvesters' will run all the given harvesters in a single phase"
             exit 1
 esac
 
@@ -55,7 +62,10 @@ if [[ ${CHOSEN_SILO} == "postgres" ]]; then
     done
 fi
 
-python harvester.py -ds \
+# expands to, e.g., --genes RAC1 if $GENES is specified, or the empty string otherwise
+GENES_ARG=${GENES:+"--genes $GENES"}
+
+python harvest_entry.py -ds \
   ${SILOS[$CHOSEN_SILO]} \
-  --harvesters ${HARVESTERS} --genes ${GENES} \
+  --harvesters ${HARVESTERS} ${GENES_ARG} \
   ${EXTRA_ARGS} $@
