@@ -24,13 +24,15 @@ from lookups.accession_mapping import ensembl_txac_to_refseq
 from utils_ex.formatting import capitalize_words
 from utils_ex.tqdm_logger import std_out_err_redirect_tqdm
 
-coord_matcher = re.compile(r'(?P<chrom>[^:]+):(?P<start>[0-9]+)-(?P<end>[0-9]+)')
+coord_matcher = re.compile(
+    r'(?P<chrom>[^:]+):(?P<start>[0-9]+)-(?P<end>[0-9]+)')
 
 # these shared assembly mappers will allow us to convert HGVS g. variants to c. and p. later on
 hdp = hgvs.dataproviders.uta.connect()
 hgnorm = hgvs.normalizer.Normalizer(hdp)
 hgvsparser = hgvs.parser.Parser()
-am = hgvs.assemblymapper.AssemblyMapper(hdp, assembly_name='GRCh37', normalize=True)
+am = hgvs.assemblymapper.AssemblyMapper(
+    hdp, assembly_name='GRCh37', normalize=True)
 
 COSMIC_MUTANTS_DB_FILE = '/data/CosmicMutantExport.sqlite'
 
@@ -84,17 +86,20 @@ def _get_rows(cursor):
         for result in results:
             yield result
 
+
 def harvest(genes=None, conn=None):
     # if the connection hasn't been opened, open it; otherwise, reuse the existing one
     if not conn:
         conn = sqlite3.connect(COSMIC_MUTANTS_DB_FILE)
 
     conn.row_factory = sqlite3.Row
+    conn.text_factory = lambda b: b.decode(errors='ignore')
 
     cursor = conn.cursor()
 
     if genes:
-        cursor.execute('select * from variants where "Gene name" in (%s) order by "Gene name"' % ','.join('?' * len(genes)), genes)
+        cursor.execute('select * from variants where "Gene name" in (%s) order by "Gene name"' %
+                       ','.join('?' * len(genes)), genes)
     else:
         cursor.execute('select * from variants order by "Gene name"')
 
@@ -228,12 +233,14 @@ def convert(sample, refseq_ac, tq):
 
     return feat_assoc
 
+
 def harvest_and_convert(genes):
     conn = sqlite3.connect(COSMIC_MUTANTS_DB_FILE)
     curs = conn.cursor()
 
     if genes:
-        curs.execute('select count(*) from variants where "Gene name" in (%s)' % ','.join('?' * len(genes)), genes)
+        curs.execute('select count(*) from variants where "Gene name" in (%s)' %
+                     ','.join('?' * len(genes)), genes)
     else:
         curs.execute("select count(*) from variants")
 

@@ -4,17 +4,42 @@ HARVESTERS="oncokb civic clinvar cosmic"
 
 # declare profiles here, so we don't have to have 1000 entrypoint scripts
 case "$1" in
-        cosmic)
-            HARVESTERS="cosmic clinvar civic oncokb"
+	      all)
             GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
             EXTRA_ARGS="--gene_chunk_size 15"
             ;;
 
+        cosmic)
+            HARVESTERS="cosmic"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+
+        clinvar)
+            HARVESTERS="clinvar"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+
+        civic)
+            HARVESTERS="civic"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+
+        onkokb)
+            HARVESTERS="oncokb"
+            GENES=$( tail -n +2 "../data/genesets/cosmic/cancer_gene_census.csv" | cut -d ',' -f 1 | xargs )
+            EXTRA_ARGS="--gene_chunk_size 15"
+            ;;
+        test)
+            GENES="BCL9L BCLAF1 BCOR BCORL1 BCR BIRC3 BIRC6 BLM BMP5 BMPR1A BRAF BRCA1 BRCA2 BRD3 BRD4'"
+            EXTRA_ARGS="--log=INFO"
+            ;;
         simple)
             GENES="RAC1 ABL2"
             EXTRA_ARGS="--log=INFO"
             ;;
-
         merged)
             echo "Updating combined geneset from OncoKB and CiVIC"
             if ../data/genesets/merged/acquire_merged_list.sh; then

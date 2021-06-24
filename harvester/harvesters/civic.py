@@ -26,7 +26,8 @@ def harvest(genes):
             gene = record['name']
             variants_details = []
             for variant in tqdm(variants, desc="fetching civic variant data for %s" % gene):
-                r = requests.get('https://{}/api/variants/{}'.format(CIVIC_API_URL, variant['id']))
+                r = requests.get(
+                    'https://{}/api/variants/{}'.format(CIVIC_API_URL, variant['id']))
                 variants_details.append(r.json())
             gene_data = {'gene': gene, 'civic': {'variants': variants_details}}
             yield gene_data
@@ -34,20 +35,24 @@ def harvest(genes):
     else:
         # harvest some genes
         for gene in set(genes):
-            r = requests.get('https://{}/api/genes/{}?identifier_type=entrez_symbol'.format(CIVIC_API_URL, gene))
+            r = requests.get(
+                'https://{}/api/genes/{}?identifier_type=entrez_symbol'.format(CIVIC_API_URL, gene))
 
             if r.status_code != 200 or len(r.json()['variants']) == 0:
-                logging.info("Found no variants in CIViC for gene {}".format(gene))
+                logging.info(
+                    "Found no variants in CIViC for gene {}".format(gene))
                 gene_data = {'gene': gene, 'civic': {'variants': []}}
             else:
                 variants = r.json()['variants']
                 variants_details = []
 
                 for variant in tqdm(variants, desc="fetching civic variant data for %s" % gene):
-                    v = requests.get('https://{}/api/variants/{}'.format(CIVIC_API_URL, variant['id']))
+                    v = requests.get(
+                        'https://{}/api/variants/{}'.format(CIVIC_API_URL, variant['id']))
                     variants_details.append(v.json())
 
-                gene_data = {'gene': gene, 'civic': {'variants': variants_details}}
+                gene_data = {'gene': gene, 'civic': {
+                    'variants': variants_details}}
 
             yield gene_data
 
@@ -134,7 +139,8 @@ def convert(gene_data):
             # example of erroneous submission:
             # https://civicdb.org/events/genes/5/summary/variants/842/summary/evidence/1941/talk/comments
             if evidence_item['status'] == 'rejected':
-                logging.warn("Skipping evidence item %s because it has status %s" % (evidence_item['id'], evidence_item['status']))
+                logging.warn("Skipping evidence item %s because it has status %s" % (
+                    evidence_item['id'], evidence_item['status']))
                 continue
 
             evidence_url = "https://{}/events/genes/{}/summary/variants/{}/summary/evidence/{}/summary#evidence".format(
@@ -155,8 +161,8 @@ def convert(gene_data):
                 ],
                 'drug_interaction_type': evidence_item['drug_interaction_type'],
                 'phenotypes': [{
-                    'description': evidence_item['disease']['name'],
-                    'id': evidence_item['disease']['url']
+                    'description': evidence_item['disease']['name'] if 'disease' in evidence_item and evidence_item['disease'] is not None and 'name' in evidence_item['disease'] else 'N/A',
+                    'id': evidence_item['disease']['url'] if 'disease' in evidence_item and evidence_item['disease'] is not None and 'url' in evidence_item['disease'] else 'N/A'
                 }],
                 'evidence': [{
                     "evidenceType": {

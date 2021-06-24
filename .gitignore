@@ -29,6 +29,7 @@ data/msk_impact_2017*
 data/cgi_biomarkers_per_variant.tsv
 data/cgi_oncogenic_mutations.tsv
 data/oncokb_all_mutations.tsv
+data/oncokb_all_actionable_variants_*.tsv
 harvester/data
 harvester/cosmic_lookup_table.tsv
 harvester/CosmicMutantExport.tsv.gz
@@ -57,3 +58,15 @@ harvester/zotero_help.py
 util/**/*.json
 harvester/*.json
 harvester/molecularmatch_trials.json
+harvester/Pipfile
+
+# Additional stuff
+data/disgenet/disgenet_2020.db
+data/disgenet/disgenet_2020.db.gz
+data/temp.tsv
+harvester/disgenet.db
+data/cgi_biomarkers.tsv
+data/cgi_biomarkers_latest.zip
+data/proteins/
+harvester/cached_2021-06-11
+harvester/merged_gene_list_latest.txt

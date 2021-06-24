@@ -106,17 +106,20 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
     # note: if the key_col is actually a SQL statement (e.g., if we need to do a custom comparison), use it verbatim.
     # otherwise formulate the comparison expression as 'colName=<placeholder>'
     cond = sql.SQL(' and ').join(map(
-        lambda x: x[1].sql if isinstance(x[1], CustomCompare) else (sql.Identifier(x[0]) + sql.SQL("=") + sql.Placeholder()),
+        lambda x: x[1].sql if isinstance(x[1], CustomCompare) else (
+            sql.Identifier(x[0]) + sql.SQL("=") + sql.Placeholder()),
         key_cols.items()  # x[0] is the column name, x[1] is the value itself
     ))
     check_stmt = sql.SQL('select id, ({no_update_needed}) as no_update_needed from {target_tbl} where {key_compare}').format(
         no_update_needed=sql.SQL(' and ').join(map(
             lambda k: (
                 # if it's not a list, checks if the scalar is already in the existing array, or...
-                sql.SQL("{} = any({})").format(sql.Literal(append_cols[k]), sql.Identifier(k))
+                sql.SQL("{} = any({})").format(
+                    sql.Literal(append_cols[k]), sql.Identifier(k))
                 if not isinstance(append_cols[k], (list, tuple)) else
                 # ...checks if the list is a subset of the existing array
-                sql.SQL("{}::text[] <@ {}").format(array_to_sql(append_cols[k]), sql.Identifier(k))
+                sql.SQL(
+                    "{}::text[] <@ {}").format(array_to_sql(append_cols[k]), sql.Identifier(k))
             ),
             append_cols.keys()
         )) if append_cols else sql.Literal(True),  # if we have no append_cols, we never need to update
@@ -163,7 +166,8 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
                             sql.Identifier(k),
                             sql.Identifier(k),
                             (
-                                sql.SQL("ARRAY[") + (sql.Literal(v)) + sql.SQL("]")
+                                sql.SQL(
+                                    "ARRAY[") + (sql.Literal(v)) + sql.SQL("]")
                                 if not isinstance(v, (list, tuple)) else
                                 array_to_sql(v)
                             )
@@ -177,7 +181,8 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
                 # construct the 'merge' part of the query if merge_existing is true
                 # FIXME: arrays should probably be extended instead of having their contents replaced
                 if merge_existing:
-                    merge_items = [p for p in params.items() if p[0] not in key_cols.keys()]
+                    merge_items = [
+                        p for p in params.items() if p[0] not in key_cols.keys()]
                     merge_part = (
                         map(
                             lambda x: (
@@ -211,7 +216,8 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
                     # we're only appending to columns, in which case the appended items are embedded in the query
                     curs.execute(update_stmt)
         else:
-            logging.info("Found record, and skipping updating b/c this record comes from a non-updating harvester")
+            logging.info(
+                "Found record, and skipping updating b/c this record comes from a non-updating harvester")
 
     else:
         # ...it doesn't exist, so insert it and get its resulting id
@@ -235,7 +241,8 @@ def _get_or_insert(curs, target_table, params, key_cols=None, append_cols=None, 
             curs.execute(insert_stmt, params.values())
             entry_id = curs.fetchone()[0]
         except psycopg2.IntegrityError as ex:
-            print("Failed to insert into %s; statement: %s" % (target_table, curs.mogrify(insert_stmt)))
+            print("Failed to insert into %s; statement: %s" %
+                  (target_table, curs.mogrify(insert_stmt)))
             raise ex
 
     return entry_id
@@ -289,14 +296,22 @@ class PostgresSilo:
                     # if you delete all the genes the cascading delete clears everything in the database,
                     # since everything is keyed to a gene at some point
                     curs.execute("delete from api_gene")
-                    curs.execute("alter sequence api_environmentalcontext_id_seq restart with 1")
-                    curs.execute("alter sequence api_evidence_id_seq restart with 1")
-                    curs.execute("alter sequence api_phenotype_id_seq restart with 1")
-                    curs.execute("alter sequence api_association_id_seq restart with 1")
-                    curs.execute("alter sequence api_variantinsource_id_seq restart with 1")
-                    curs.execute("alter sequence api_svipvariant_id_seq restart with 1")
-                    curs.execute("alter sequence api_variant_id_seq restart with 1")
-                    curs.execute("alter sequence api_gene_id_seq restart with 1")
+                    curs.execute(
+                        "alter sequence api_environmentalcontext_id_seq restart with 1")
+                    curs.execute(
+                        "alter sequence api_evidence_id_seq restart with 1")
+                    curs.execute(
+                        "alter sequence api_phenotype_id_seq restart with 1")
+                    curs.execute(
+                        "alter sequence api_association_id_seq restart with 1")
+                    curs.execute(
+                        "alter sequence api_variantinsource_id_seq restart with 1")
+                    curs.execute(
+                        "alter sequence api_svipvariant_id_seq restart with 1")
+                    curs.execute(
+                        "alter sequence api_variant_id_seq restart with 1")
+                    curs.execute(
+                        "alter sequence api_gene_id_seq restart with 1")
                 conn.commit()
 
         except Exception as e:
@@ -306,7 +321,8 @@ class PostgresSilo:
     def delete_source(self, source, cleanup_orphans=False):
         """ delete source from index """
         try:
-            logging.info("PostgresSilo: clearing records which mention source '%s'..." % source)
+            logging.info(
+                "PostgresSilo: clearing records which mention source '%s'..." % source)
 
             with self._connect() as conn:
                 with conn.cursor() as curs:
@@ -360,7 +376,8 @@ class PostgresSilo:
 
         # pre-step: ensure the feature_association has everything we need
         if 'gene_identifiers' not in feature_association:
-            logging.warn("Feature association lacks essential key 'gene_identifiers', skipping")
+            logging.warn(
+                "Feature association lacks essential key 'gene_identifiers', skipping")
             return
 
         # --------------------------------------------------------------------------------
@@ -400,7 +417,8 @@ class PostgresSilo:
             elif len(genes_to_ids) == 1:
                 return genes_to_ids.values()[0]
             else:
-                raise Exception("geneSymbol %s can't be found in genes_to_ids (%s)" % (symbol, ', '.join(genes_to_ids.keys())) )
+                raise Exception("geneSymbol %s can't be found in genes_to_ids (%s)" % (
+                    symbol, ', '.join(genes_to_ids.keys())))
 
         variants_to_ids = {}
         last_variant_id = None
@@ -437,7 +455,8 @@ class PostgresSilo:
                 'dbsnp_ids': feat.get('dbsnp_ids'),
                 'myvariant_hg19': feat.get('myvariant_hg19'),
 
-                'mv_info': jsonify_or_none(feat.get('mv_info')),  # optional info from the myvariant_enricher "normalizer",
+                # optional info from the myvariant_enricher "normalizer",
+                'mv_info': jsonify_or_none(feat.get('mv_info')),
 
                 'crawl_status': jsonify_or_none(feat.get('crawl_status'))
             }
@@ -464,7 +483,8 @@ class PostgresSilo:
                 key_cols={
                     'gene_id': this_gene_id,
                     'name': CustomCompare(
-                        sql_stmt=sql.SQL("lower({})=lower({})").format(sql.Identifier('name'), sql.Placeholder()),
+                        sql_stmt=sql.SQL("lower({})=lower({})").format(
+                            sql.Identifier('name'), sql.Placeholder()),
                         value=feat['name']
                     ),
                     'hgvs_g': CustomCompare(
@@ -483,7 +503,8 @@ class PostgresSilo:
             )
 
             variants_to_ids[feat['name']] = variant_id
-            last_variant_id = variant_id  # keep track of the most-recently-inserted variant (hopefully the only one...)
+            # keep track of the most-recently-inserted variant (hopefully the only one...)
+            last_variant_id = variant_id
 
             if VERBOSE:
                 print("Got variant_id: %d" % variant_id)
@@ -520,7 +541,8 @@ class PostgresSilo:
             'drug_labels': assoc.get('drug_labels'),
             'drug_interaction_type': assoc.get('drug_interaction_type'),
             'variant_name': assoc.get('variant_name'),
-            'source_link': assoc.get('source_link'),  # this is the actual sample ID
+            # this is the actual sample ID
+            'source_link': assoc.get('source_link'),
             'variant_in_source_id': variant_in_source_id,
 
             'evidence_type': assoc.get('evidence_type'),
@@ -640,13 +662,25 @@ class PostgresSilo:
 
             if len(self.source_to_id) == 0:
                 # FIXME: ideally we should ensure this elsewhere, but for now let's make sure we have some sources
+<<<<<<< HEAD
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
                 curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (5, 'svip_queue', 'SVIP Submissions')")
+=======
+                curs.execute(
+                    "INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
+                curs.execute(
+                    "INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
+                curs.execute(
+                    "INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
+                curs.execute(
+                    "INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
+>>>>>>> harvester_adjustments
 
-                print("Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
+                print(
+                    "Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
 
         # split first by source, then by gene, then create a transaction and insert all feat_assocs in that gene
         for source, source_feats in itertools.groupby(feature_association_generator, key=operator.itemgetter('source')):
@@ -667,14 +701,16 @@ class PostgresSilo:
                         for feature_association in gene_feats:
                             total_inserted += 1
                             try:
-                                self._save_one(curs, feature_association, harvest_id)
+                                self._save_one(
+                                    curs, feature_association, harvest_id)
                             except Exception as ex:
                                 traceback.print_exc()
                                 logging.warning("skipped, due to %s" % str(ex))
                                 skipped += 1
                                 continue
 
-                    logging.info("Inserted %d entries for gene %s, skipped %d" % (total_inserted, gene, skipped))
+                    logging.info("Inserted %d entries for gene %s, skipped %d" % (
+                        total_inserted, gene, skipped))
 
                     if stats is not None:
                         stats['genes'][gene[0]][source] = {
@@ -724,7 +760,14 @@ class PostgresSilo:
         finally:
             # write out our completion time, final status, etc.
             with conn.cursor() as curs:
-                print("Updating harvest ID %s to status %s" % (harvest_id, exit_status))
+                print("Updating harvest ID %s to status %s" %
+                      (harvest_id, exit_status))
+                stats_json = json.dumps(
+                    stats, ensure_ascii=False, encoding='utf-8')
+                print('exit_status', exit_status)
+                print('output', output)
+                print('stats_json', stats_json)
+                print('harvest_id', harvest_id)
                 curs.execute(
                     """update public.api_harvestrun set
                     ended_on=now(),
@@ -732,6 +775,6 @@ class PostgresSilo:
                     output=%s,
                     stats=%s
                     where id=%s""",
-                    (exit_status, output, json.dumps(stats), harvest_id)
+                    (exit_status, output, stats_json, harvest_id)
                 )
             conn.commit()
