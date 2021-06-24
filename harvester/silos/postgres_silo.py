@@ -623,8 +623,10 @@ class PostgresSilo:
         # to the new variant(s)
         if 'extras' in assoc and 'submitted_var_id' in assoc['extras']:
             submit_id = assoc['extras']['submitted_var_id']
-            cols = ('resulting_variants', 'for_curation_request', 'curation_disease_id', 'requestor')
-            curs.execute("select {} from svip_submittedvariant where id=%s".format(", ".join(cols)), (submit_id,))
+            cols = ('resulting_variants', 'for_curation_request',
+                    'curation_disease_id', 'requestor')
+            curs.execute("select {} from svip_submittedvariant where id=%s".format(
+                ", ".join(cols)), (submit_id,))
             submission = dict(zip(cols, curs.fetchone()))
 
             logging.info("Updating submitted variant w/id %s..." % submit_id)
@@ -644,7 +646,6 @@ class PostgresSilo:
                 values (now(), %s, %s, %s, %s) on conflict DO NOTHING
                 """, (submission['curation_disease_id'], submission['requestor'], submit_id, last_variant_id))
 
-
     def save_bulk(self, feature_association_generator, harvest_id=None, stats=None):
         """
         Writes multiple feature associations to the database in a transaction.
@@ -662,13 +663,6 @@ class PostgresSilo:
 
             if len(self.source_to_id) == 0:
                 # FIXME: ideally we should ensure this elsewhere, but for now let's make sure we have some sources
-<<<<<<< HEAD
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (2, 'oncokb', 'OncoKB')")
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
-                curs.execute("INSERT INTO public.api_source (id, name, display_name) VALUES (5, 'svip_queue', 'SVIP Submissions')")
-=======
                 curs.execute(
                     "INSERT INTO public.api_source (id, name, display_name) VALUES (1, 'civic', 'CIViC')")
                 curs.execute(
@@ -677,7 +671,6 @@ class PostgresSilo:
                     "INSERT INTO public.api_source (id, name, display_name) VALUES (3, 'clinvar', 'ClinVar')")
                 curs.execute(
                     "INSERT INTO public.api_source (id, name, display_name) VALUES (4, 'cosmic', 'COSMIC')")
->>>>>>> harvester_adjustments
 
                 print(
                     "Inserted civic, oncokb, clinvar, cosmic into sources, since there weren't any...")
